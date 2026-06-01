@@ -2,7 +2,38 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "get-configuration output",
     "$id": "http://schema.nethserver.org/grantora/get-configuration-output.json",
-    "description": "Get grantora configuration",
+    "description": "Get grantora runtime skeleton configuration",
     "examples": [],
-    "type": "object"
+    "type": "object",
+    "required": [
+        "configured",
+        "files",
+        "grantora_image",
+        "grantora_version",
+        "public_base_url",
+        "tcp_port"
+    ],
+    "properties": {
+        "configured": {
+            "type": "boolean"
+        },
+        "files": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "boolean"
+            }
+        },
+        "grantora_image": {
+            "type": "string"
+        },
+        "grantora_version": {
+            "type": "string"
+        },
+        "public_base_url": {
+            "type": "string"
+        },
+        "tcp_port": {
+            "type": "integer"
+        }
+    }
 }

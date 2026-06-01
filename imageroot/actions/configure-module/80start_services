@@ -5,7 +5,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 
-# If the control reaches this step, the placeholder service can be enabled.
+# If the control reaches this step, the runtime skeleton can be enabled.
 
 systemctl --user daemon-reload
-systemctl --user enable --now grantora.service
+systemctl --user enable grantora.service
+systemctl --user restart grantora.service

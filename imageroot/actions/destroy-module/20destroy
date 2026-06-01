@@ -10,3 +10,6 @@ set -e
 cat >/dev/null
 
 systemctl --user disable --now grantora.service || true
+systemctl --user stop grantora-apisix.service grantora-api.service || true
+systemctl --user stop grantora-apisix-etcd.service grantora-postgres.service || true
+systemctl --user stop grantora-pod.service || true

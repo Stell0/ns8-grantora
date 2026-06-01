@@ -4,12 +4,21 @@
 #
 
 [Unit]
-Description=Grantora placeholder service
+Description=Grantora runtime
+Wants=grantora-pod.service
+Wants=grantora-postgres.service
+Wants=grantora-apisix-etcd.service
+Wants=grantora-api.service
+Wants=grantora-apisix.service
+After=grantora-pod.service
+After=grantora-postgres.service
+After=grantora-apisix-etcd.service
+After=grantora-api.service
+After=grantora-apisix.service
 
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/true
-ExecStop=/usr/bin/true
 RemainAfterExit=yes
 
 [Install]

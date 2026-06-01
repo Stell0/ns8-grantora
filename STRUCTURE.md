@@ -1,6 +1,6 @@
 # STRUCTURE.md
 
-Current repository map for `ns8-grantora` during repository initialization.
+Current repository map for `ns8-grantora` during the pod-based runtime packaging skeleton.
 
 ## Root
 
@@ -15,11 +15,17 @@ Current repository map for `ns8-grantora` during repository initialization.
 
 ## `imageroot/`
 
-- `actions/configure-module/`: placeholder configure action kept stable for Milestone 0.
-- `actions/get-configuration/`: returns current module configuration shape.
-- `actions/destroy-module/`: tears down Milestone 0 placeholder state.
-- `systemd/user/grantora.service`: temporary placeholder unit that will become the aggregate Grantora service in Milestone 1.
+- `actions/configure-module/`: renders runtime state/env files and restarts `grantora.service`.
+- `actions/get-configuration/`: returns safe runtime skeleton configuration and generated-file presence.
+- `actions/destroy-module/`: stops the aggregate service and helper units.
+- `bin/grantora-env`: idempotent state, secret, and env-file renderer for the runtime skeleton.
+- `systemd/user/grantora.service`: aggregate Grantora service.
+- `systemd/user/grantora-pod.service`: owns pod `grantora` and the only host port mapping, `127.0.0.1:${TCP_PORT}:9080`.
+- `systemd/user/grantora-postgres.service`: PostgreSQL helper container in the pod.
+- `systemd/user/grantora-apisix-etcd.service`: APISIX etcd helper container in the pod.
+- `systemd/user/grantora-api.service`: upstream Grantora API container in the pod.
+- `systemd/user/grantora-apisix.service`: APISIX runtime/data-plane container in the pod.
 
 ## Target expansion
 
-Later milestones add the explicit Grantora pod topology under `imageroot/systemd/user/` and more actions such as `get-status`, `sync-users`, `backup-module`, and `restore-module`. The planned layout is tracked in [PLAN.md](PLAN.md).
+Later milestones add public Traefik routing, richer status actions, user-domain sync, bootstrap helpers, backup/restore, and the admin UI surfaces tracked in [PLAN.md](PLAN.md).

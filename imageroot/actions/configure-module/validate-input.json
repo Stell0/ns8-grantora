@@ -2,7 +2,73 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "configure-module input",
     "$id": "http://schema.nethserver.org/grantora/configure-module-input.json",
-    "description": "Configure grantora",
+    "description": "Configure grantora runtime skeleton",
     "examples": [],
-    "type": "object"
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "host": {
+            "type": "string",
+            "minLength": 1
+        },
+        "user_domain": {
+            "type": "string",
+            "minLength": 1
+        },
+        "grantora_image": {
+            "type": "string",
+            "minLength": 1
+        },
+        "grantora_version": {
+            "type": "string",
+            "minLength": 1
+        },
+        "metrics_enabled": {
+            "type": "boolean"
+        },
+        "log_level": {
+            "type": "string",
+            "enum": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+        },
+        "runtime_rate_limit_count": {
+            "type": "integer",
+            "minimum": 1
+        },
+        "runtime_rate_limit_time_window": {
+            "type": "integer",
+            "minimum": 1
+        },
+        "audit_retention_days": {
+            "type": "integer",
+            "minimum": 1
+        },
+        "usage_retention_days": {
+            "type": "integer",
+            "minimum": 1
+        },
+        "upstream_tls_verify": {
+            "type": "boolean"
+        },
+        "upstream_timeout_seconds": {
+            "type": "integer",
+            "minimum": 1
+        },
+        "upstream_connect_timeout_seconds": {
+            "type": "integer",
+            "minimum": 1
+        },
+        "upstream_max_response_bytes": {
+            "type": "integer",
+            "minimum": 1
+        },
+        "upstream_read_retry_attempts": {
+            "type": "integer",
+            "minimum": 0
+        },
+        "tcp_port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+        }
+    }
 }

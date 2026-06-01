@@ -1,0 +1,285 @@
+#!/usr/bin/env python3
+
+import base64
+import hashlib
+import hmac
+import json
+import os
+import secrets
+import stat
+import sys
+from pathlib import Path
+
+
+STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", Path.home() / ".local/state")) / "state"
+
+DEFAULT_ENV = {
+    "GRANTORA_IMAGE": "ghcr.io/grantora/grantora-api:0.1.0",
+    "GRANTORA_VERSION": "0.1.0",
+    "GRANTORA_LOG_LEVEL": "INFO",
+    "METRICS_ENABLED": "true",
+    "AUDIT_RETENTION_DAYS": "365",
+    "USAGE_RETENTION_DAYS": "365",
+    "APISIX_SYNC_ENABLED": "true",
+    "APISIX_SYNC_INTERVAL_SECONDS": "30",
+    "APISIX_FAIL_CLOSED": "true",
+    "APISIX_RATE_LIMIT_COUNT": "1000",
+    "APISIX_RATE_LIMIT_TIME_WINDOW": "60",
+    "UPSTREAM_TIMEOUT_SECONDS": "30",
+    "UPSTREAM_CONNECT_TIMEOUT_SECONDS": "5",
+    "UPSTREAM_TLS_VERIFY": "true",
+    "UPSTREAM_MAX_RESPONSE_BYTES": "10485760",
+    "UPSTREAM_READ_RETRY_ATTEMPTS": "2",
+    "TCP_PORT": "9080",
+}
+
+INPUT_TO_ENV = {
+    "grantora_image": "GRANTORA_IMAGE",
+    "grantora_version": "GRANTORA_VERSION",
+    "metrics_enabled": "METRICS_ENABLED",
+    "log_level": "GRANTORA_LOG_LEVEL",
+    "audit_retention_days": "AUDIT_RETENTION_DAYS",
+    "usage_retention_days": "USAGE_RETENTION_DAYS",
+    "runtime_rate_limit_count": "APISIX_RATE_LIMIT_COUNT",
+    "runtime_rate_limit_time_window": "APISIX_RATE_LIMIT_TIME_WINDOW",
+    "upstream_tls_verify": "UPSTREAM_TLS_VERIFY",
+    "upstream_timeout_seconds": "UPSTREAM_TIMEOUT_SECONDS",
+    "upstream_connect_timeout_seconds": "UPSTREAM_CONNECT_TIMEOUT_SECONDS",
+    "upstream_max_response_bytes": "UPSTREAM_MAX_RESPONSE_BYTES",
+    "upstream_read_retry_attempts": "UPSTREAM_READ_RETRY_ATTEMPTS",
+    "tcp_port": "TCP_PORT",
+}
+
+SECRET_KEYS = {
+    "POSTGRES_PASSWORD",
+    "APISIX_ADMIN_KEY",
+    "SECRET_ENCRYPTION_KEY",
+    "GRANTORA_AGENT_TOKEN_PEPPER",
+    "ADMIN_BOOTSTRAP_TOKEN",
+    "GRANTORA_ADMIN_BOOTSTRAP_TOKEN_HASH",
+    "DATABASE_URL",
+}
+
+
+def parse_envfile(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not path.exists():
+        return values
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key] = value
+    return values
+
+
+def write_envfile(path: Path, values: dict[str, str], secret: bool = False) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    content = "".join(f"{key}={values[key]}\n" for key in sorted(values))
+    path.write_text(content, encoding="utf-8")
+    if secret:
+        path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+
+
+def as_env_value(value: object) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
+def public_base_url(config: dict[str, object], env: dict[str, str]) -> str:
+    host = str(config.get("host") or "").strip()
+    if host:
+        return f"https://{host}"
+    return env.get("GRANTORA_PUBLIC_BASE_URL", f"http://127.0.0.1:{env['TCP_PORT']}")
+
+
+def load_runtime_env() -> dict[str, str]:
+    current = parse_envfile(STATE_DIR / "environment")
+    env = DEFAULT_ENV | current
+    env.setdefault("GRANTORA_PUBLIC_BASE_URL", f"http://127.0.0.1:{env['TCP_PORT']}")
+    return env
+
+
+def configure() -> None:
+    config = json.load(sys.stdin)
+    env = load_runtime_env()
+    for input_name, env_name in INPUT_TO_ENV.items():
+        if input_name in config and config[input_name] is not None:
+            env[env_name] = as_env_value(config[input_name])
+    env["GRANTORA_PUBLIC_BASE_URL"] = public_base_url(config, env)
+    if "user_domain" in config and config["user_domain"]:
+        env["LDAP_USER_DOMAIN"] = str(config["user_domain"])
+    write_envfile(STATE_DIR / "environment", env)
+    render()
+
+
+def generated_secrets() -> dict[str, str]:
+    secrets_env = parse_envfile(STATE_DIR / "secrets.env")
+    secrets_env.setdefault("POSTGRES_PASSWORD", secrets.token_urlsafe(32))
+    secrets_env.setdefault("APISIX_ADMIN_KEY", secrets.token_urlsafe(32))
+    secrets_env.setdefault(
+        "SECRET_ENCRYPTION_KEY",
+        base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("ascii"),
+    )
+    secrets_env.setdefault("GRANTORA_AGENT_TOKEN_PEPPER", secrets.token_urlsafe(32))
+    secrets_env.setdefault("ADMIN_BOOTSTRAP_TOKEN", f"grantora-admin-{secrets.token_urlsafe(24)}")
+    digest = hmac.new(
+        secrets_env["GRANTORA_AGENT_TOKEN_PEPPER"].encode(),
+        secrets_env["ADMIN_BOOTSTRAP_TOKEN"].encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    secrets_env["GRANTORA_ADMIN_BOOTSTRAP_TOKEN_HASH"] = f"hmac-sha256:{digest}"
+    return secrets_env
+
+
+def render() -> None:
+    env = load_runtime_env()
+    secrets_env = generated_secrets()
+    secrets_env["DATABASE_URL"] = (
+        "postgresql+psycopg://grantora:"
+        f"{secrets_env['POSTGRES_PASSWORD']}@127.0.0.1:5432/grantora"
+    )
+
+    write_envfile(STATE_DIR / "secrets.env", secrets_env, secret=True)
+    write_envfile(
+        STATE_DIR / "runtime.env",
+        {
+            "APISIX_ADMIN_URL": "http://127.0.0.1:9180",
+            "APISIX_ETCD_ENDPOINT": "http://127.0.0.1:2379",
+            "APISIX_RUNTIME_UPSTREAM_NODE": "127.0.0.1:8080",
+            "GRANTORA_API_INTERNAL_URL": "http://127.0.0.1:8080",
+            "GRANTORA_POD_NAME": "grantora",
+            "GRANTORA_RUNTIME_INTERNAL_URL": "http://127.0.0.1:9080",
+            "TCP_PORT": env["TCP_PORT"],
+        },
+    )
+    write_envfile(
+        STATE_DIR / "postgres.env",
+        {
+            "PGDATA": "/var/lib/postgresql/data/pgdata",
+            "POSTGRES_DB": "grantora",
+            "POSTGRES_PASSWORD": secrets_env["POSTGRES_PASSWORD"],
+            "POSTGRES_USER": "grantora",
+        },
+        secret=True,
+    )
+    write_envfile(
+        STATE_DIR / "grantora.env",
+        {
+            "APISIX_ADMIN_TIMEOUT_SECONDS": "5",
+            "APISIX_ADMIN_URL": "http://127.0.0.1:9180",
+            "APISIX_FAIL_CLOSED": env["APISIX_FAIL_CLOSED"],
+            "APISIX_RATE_LIMIT_COUNT": env["APISIX_RATE_LIMIT_COUNT"],
+            "APISIX_RATE_LIMIT_TIME_WINDOW": env["APISIX_RATE_LIMIT_TIME_WINDOW"],
+            "APISIX_RUNTIME_UPSTREAM_NODE": "127.0.0.1:8080",
+            "APISIX_SYNC_ENABLED": env["APISIX_SYNC_ENABLED"],
+            "APISIX_SYNC_INTERVAL_SECONDS": env["APISIX_SYNC_INTERVAL_SECONDS"],
+            "AUDIT_RETENTION_DAYS": env["AUDIT_RETENTION_DAYS"],
+            "DATABASE_MAX_OVERFLOW": "20",
+            "DATABASE_POOL_SIZE": "10",
+            "DEFAULT_REQUEST_TIMEOUT_SECONDS": env["UPSTREAM_TIMEOUT_SECONDS"],
+            "FEATURE_EXTERNAL_SECRET_STORE": "false",
+            "FEATURE_OIDC": "false",
+            "GRANTORA_BIND_ADDR": "127.0.0.1",
+            "GRANTORA_ENV": "production",
+            "GRANTORA_JSON_LOGS": "true",
+            "GRANTORA_LOG_LEVEL": env["GRANTORA_LOG_LEVEL"],
+            "GRANTORA_PORT": "8080",
+            "GRANTORA_PUBLIC_BASE_URL": env["GRANTORA_PUBLIC_BASE_URL"],
+            "MAX_REQUEST_BODY_BYTES": "1048576",
+            "METRICS_ENABLED": env["METRICS_ENABLED"],
+            "OIDC_ADMIN_SUBJECTS": "",
+            "OIDC_SUBJECT_HEADER": "X-Grantora-Admin-Subject",
+            "OIDC_TRUSTED_PROXY_CIDRS": "127.0.0.1/32,::1/128",
+            "OTEL_EXPORTER_OTLP_ENDPOINT": "",
+            "OTEL_EXPORTER_OTLP_TIMEOUT_SECONDS": "10",
+            "OTEL_SERVICE_NAME": "grantora",
+            "OTEL_TRACING_ENABLED": "false",
+            "REQUEST_ID_HEADER": "X-Request-Id",
+            "UPSTREAM_CONNECT_TIMEOUT_SECONDS": env["UPSTREAM_CONNECT_TIMEOUT_SECONDS"],
+            "UPSTREAM_MAX_RESPONSE_BYTES": env["UPSTREAM_MAX_RESPONSE_BYTES"],
+            "UPSTREAM_READ_RETRY_ATTEMPTS": env["UPSTREAM_READ_RETRY_ATTEMPTS"],
+            "UPSTREAM_TIMEOUT_SECONDS": env["UPSTREAM_TIMEOUT_SECONDS"],
+            "UPSTREAM_TLS_VERIFY": env["UPSTREAM_TLS_VERIFY"],
+            "USAGE_RETENTION_DAYS": env["USAGE_RETENTION_DAYS"],
+        },
+    )
+    write_envfile(STATE_DIR / "apisix.env", {"APISIX_STAND_ALONE": "false"})
+    render_apisix_config(secrets_env["APISIX_ADMIN_KEY"])
+
+
+def render_apisix_config(admin_key: str) -> None:
+    config = f"""apisix:
+  node_listen: 9080
+  enable_ipv6: false
+  enable_admin: true
+
+deployment:
+  role: traditional
+  role_traditional:
+    config_provider: etcd
+  admin:
+    allow_admin:
+      - 127.0.0.0/24
+    admin_key:
+      - name: admin
+        key: {admin_key}
+        role: admin
+  etcd:
+    host:
+      - http://127.0.0.1:2379
+
+plugin_attr:
+  prometheus:
+    export_addr:
+      ip: 127.0.0.1
+      port: 9091
+"""
+    path = STATE_DIR / "apisix-config.yaml"
+    path.write_text(config, encoding="utf-8")
+    path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+
+
+def status() -> None:
+    env = load_runtime_env()
+    files = {
+        name: (STATE_DIR / name).exists()
+        for name in (
+            "runtime.env",
+            "grantora.env",
+            "postgres.env",
+            "apisix.env",
+            "apisix-config.yaml",
+            "secrets.env",
+        )
+    }
+    json.dump(
+        {
+            "configured": all(files.values()),
+            "files": files,
+            "grantora_image": env["GRANTORA_IMAGE"],
+            "grantora_version": env["GRANTORA_VERSION"],
+            "public_base_url": env["GRANTORA_PUBLIC_BASE_URL"],
+            "tcp_port": int(env["TCP_PORT"]),
+        },
+        sys.stdout,
+    )
+
+
+def main() -> None:
+    if len(sys.argv) != 2 or sys.argv[1] not in {"configure", "render", "status"}:
+        print("usage: grantora-env configure|render|status", file=sys.stderr)
+        sys.exit(2)
+    command = sys.argv[1]
+    if command == "configure":
+        configure()
+    elif command == "render":
+        render()
+    else:
+        status()
+
+
+if __name__ == "__main__":
+    main()

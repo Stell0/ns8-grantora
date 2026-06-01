@@ -356,39 +356,39 @@ Objective: start the full Grantora runtime stack as one NS8 rootless Podman pod,
 
 Tasks:
 
-- [ ] Create `grantora-pod.service`:
-  - [ ] creates/replaces pod `grantora`;
-  - [ ] publishes only `127.0.0.1:${TCP_PORT}:9080`;
-  - [ ] does not publish Grantora API, PostgreSQL, APISIX Admin API or etcd;
-  - [ ] owns pod-level network lifecycle.
-- [ ] Create `grantora-postgres.service`:
-  - [ ] runs `postgres:16-alpine` or approved image;
-  - [ ] joins `--pod=grantora`;
-  - [ ] uses `state/postgres.env`;
-  - [ ] bind-mounts `state/postgres-data/`;
-  - [ ] exposes only pod-local `127.0.0.1:5432`.
-- [ ] Create `grantora-apisix-etcd.service`:
-  - [ ] joins `--pod=grantora`;
-  - [ ] bind-mounts `state/apisix-etcd-data/`;
-  - [ ] listens only pod-local on `127.0.0.1:2379` or pod-local equivalent.
-- [ ] Create `grantora-api.service`:
-  - [ ] runs upstream versioned Grantora API image;
-  - [ ] joins `--pod=grantora`;
-  - [ ] uses `state/grantora.env` plus `state/secrets.env`;
-  - [ ] sets `DATABASE_URL` to pod-local PostgreSQL;
-  - [ ] sets `APISIX_ADMIN_URL` to pod-local APISIX Admin API;
-  - [ ] sets `APISIX_RUNTIME_UPSTREAM_NODE=127.0.0.1:8080`;
-  - [ ] does not publish ports.
-- [ ] Create `grantora-apisix.service`:
-  - [ ] joins `--pod=grantora`;
-  - [ ] uses `state/apisix.env`;
-  - [ ] renders APISIX config for pod-local etcd;
-  - [ ] exposes runtime `9080` only through the pod mapping;
-  - [ ] keeps Admin API `9180` pod-local only.
-- [ ] Create aggregate `grantora.service` that starts/stops the pod and all container units.
-- [ ] Generate env files from state and secrets.
-- [ ] Add service health checks using `/healthz`, `/readyz`, PostgreSQL readiness and APISIX runtime reachability.
-- [ ] Ensure helpers can be restarted independently without recreating the pod unless the pod networking changed.
+- [x] Create `grantora-pod.service`:
+  - [x] creates/replaces pod `grantora`;
+  - [x] publishes only `127.0.0.1:${TCP_PORT}:9080`;
+  - [x] does not publish Grantora API, PostgreSQL, APISIX Admin API or etcd;
+  - [x] owns pod-level network lifecycle.
+- [x] Create `grantora-postgres.service`:
+  - [x] runs `postgres:16-alpine` or approved image;
+  - [x] joins `--pod=grantora`;
+  - [x] uses `state/postgres.env`;
+  - [x] bind-mounts `state/postgres-data/`;
+  - [x] exposes only pod-local `127.0.0.1:5432`.
+- [x] Create `grantora-apisix-etcd.service`:
+  - [x] joins `--pod=grantora`;
+  - [x] bind-mounts `state/apisix-etcd-data/`;
+  - [x] listens only pod-local on `127.0.0.1:2379` or pod-local equivalent.
+- [x] Create `grantora-api.service`:
+  - [x] runs upstream versioned Grantora API image;
+  - [x] joins `--pod=grantora`;
+  - [x] uses `state/grantora.env` plus `state/secrets.env`;
+  - [x] sets `DATABASE_URL` to pod-local PostgreSQL;
+  - [x] sets `APISIX_ADMIN_URL` to pod-local APISIX Admin API;
+  - [x] sets `APISIX_RUNTIME_UPSTREAM_NODE=127.0.0.1:8080`;
+  - [x] does not publish ports.
+- [x] Create `grantora-apisix.service`:
+  - [x] joins `--pod=grantora`;
+  - [x] uses `state/apisix.env`;
+  - [x] renders APISIX config for pod-local etcd;
+  - [x] exposes runtime `9080` only through the pod mapping;
+  - [x] keeps Admin API `9180` pod-local only.
+- [x] Create aggregate `grantora.service` that starts/stops the pod and all container units.
+- [x] Generate env files from state and secrets.
+- [x] Add service health checks using `/healthz`, `/readyz`, PostgreSQL readiness and APISIX runtime reachability.
+- [x] Ensure helpers can be restarted independently without recreating the pod unless the pod networking changed.
 
 Acceptance:
 
