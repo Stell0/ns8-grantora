@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+helper = Path(__file__).resolve().parents[2] / "bin" / "grantora-admin"
+last_error = ""
+
+for _attempt in range(12):
+    result = subprocess.run(
+        [helper, "POST", "/v1/admin/apisix/sync"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode == 0:
+        sys.exit(0)
+    last_error = result.stderr.strip() or result.stdout.strip()
+    time.sleep(5)
+
+print(last_error or "APISIX sync failed", file=sys.stderr)
+sys.exit(1)

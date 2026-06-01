@@ -5,13 +5,21 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
+import socket
 import stat
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", Path.home() / ".local/state")) / "state"
+
+HOST_RE = re.compile(
+    r"^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)"
+    r"(?:\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))+$"
+)
 
 DEFAULT_ENV = {
     "GRANTORA_IMAGE": "ghcr.io/grantora/grantora-api:0.1.0",
@@ -95,6 +103,18 @@ def public_base_url(config: dict[str, object], env: dict[str, str]) -> str:
     return env.get("GRANTORA_PUBLIC_BASE_URL", f"http://127.0.0.1:{env['TCP_PORT']}")
 
 
+def public_host(env: dict[str, str]) -> str:
+    parsed = urlparse(env.get("GRANTORA_PUBLIC_BASE_URL", ""))
+    return parsed.hostname or ""
+
+
+def default_host() -> str:
+    fqdn = socket.getfqdn().strip().lower()
+    if HOST_RE.fullmatch(fqdn):
+        return fqdn
+    return "grantora.example.org"
+
+
 def load_runtime_env() -> dict[str, str]:
     current = parse_envfile(STATE_DIR / "environment")
     env = DEFAULT_ENV | current
@@ -111,8 +131,32 @@ def configure() -> None:
     env["GRANTORA_PUBLIC_BASE_URL"] = public_base_url(config, env)
     if "user_domain" in config and config["user_domain"]:
         env["LDAP_USER_DOMAIN"] = str(config["user_domain"])
+    if "lets_encrypt" in config:
+        env["TRAEFIK_LETS_ENCRYPT"] = as_env_value(config["lets_encrypt"])
     write_envfile(STATE_DIR / "environment", env)
     render()
+
+
+def default_config() -> dict[str, object]:
+    env = load_runtime_env()
+    return {
+        "host": public_host(env) or default_host(),
+        "grantora_image": env["GRANTORA_IMAGE"],
+        "grantora_version": env["GRANTORA_VERSION"],
+        "metrics_enabled": env["METRICS_ENABLED"] == "true",
+        "log_level": env["GRANTORA_LOG_LEVEL"],
+        "runtime_rate_limit_count": int(env["APISIX_RATE_LIMIT_COUNT"]),
+        "runtime_rate_limit_time_window": int(env["APISIX_RATE_LIMIT_TIME_WINDOW"]),
+        "audit_retention_days": int(env["AUDIT_RETENTION_DAYS"]),
+        "usage_retention_days": int(env["USAGE_RETENTION_DAYS"]),
+        "upstream_tls_verify": env["UPSTREAM_TLS_VERIFY"] == "true",
+        "upstream_timeout_seconds": int(env["UPSTREAM_TIMEOUT_SECONDS"]),
+        "upstream_connect_timeout_seconds": int(env["UPSTREAM_CONNECT_TIMEOUT_SECONDS"]),
+        "upstream_max_response_bytes": int(env["UPSTREAM_MAX_RESPONSE_BYTES"]),
+        "upstream_read_retry_attempts": int(env["UPSTREAM_READ_RETRY_ATTEMPTS"]),
+        "tcp_port": int(env["TCP_PORT"]),
+        "lets_encrypt": env.get("TRAEFIK_LETS_ENCRYPT", "true") == "true",
+    }
 
 
 def generated_secrets() -> dict[str, str]:
@@ -259,8 +303,22 @@ def status() -> None:
         {
             "configured": all(files.values()),
             "files": files,
+            "host": public_host(env),
             "grantora_image": env["GRANTORA_IMAGE"],
             "grantora_version": env["GRANTORA_VERSION"],
+            "lets_encrypt": env.get("TRAEFIK_LETS_ENCRYPT", "true") == "true",
+            "metrics_enabled": env["METRICS_ENABLED"] == "true",
+            "log_level": env["GRANTORA_LOG_LEVEL"],
+            "runtime_rate_limit_count": int(env["APISIX_RATE_LIMIT_COUNT"]),
+            "runtime_rate_limit_time_window": int(env["APISIX_RATE_LIMIT_TIME_WINDOW"]),
+            "audit_retention_days": int(env["AUDIT_RETENTION_DAYS"]),
+            "usage_retention_days": int(env["USAGE_RETENTION_DAYS"]),
+            "upstream_tls_verify": env["UPSTREAM_TLS_VERIFY"] == "true",
+            "upstream_timeout_seconds": int(env["UPSTREAM_TIMEOUT_SECONDS"]),
+            "upstream_connect_timeout_seconds": int(env["UPSTREAM_CONNECT_TIMEOUT_SECONDS"]),
+            "upstream_max_response_bytes": int(env["UPSTREAM_MAX_RESPONSE_BYTES"]),
+            "upstream_read_retry_attempts": int(env["UPSTREAM_READ_RETRY_ATTEMPTS"]),
+            "ldap_user_domain": env.get("LDAP_USER_DOMAIN", ""),
             "public_base_url": env["GRANTORA_PUBLIC_BASE_URL"],
             "tcp_port": int(env["TCP_PORT"]),
         },
@@ -269,12 +327,14 @@ def status() -> None:
 
 
 def main() -> None:
-    if len(sys.argv) != 2 or sys.argv[1] not in {"configure", "render", "status"}:
-        print("usage: grantora-env configure|render|status", file=sys.stderr)
+    if len(sys.argv) != 2 or sys.argv[1] not in {"configure", "defaults", "render", "status"}:
+        print("usage: grantora-env configure|defaults|render|status", file=sys.stderr)
         sys.exit(2)
     command = sys.argv[1]
     if command == "configure":
         configure()
+    elif command == "defaults":
+        json.dump(default_config(), sys.stdout)
     elif command == "render":
         render()
     else:

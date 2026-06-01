@@ -1,0 +1,33 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "get-status output",
+    "$id": "http://schema.nethserver.org/grantora/get-status-output.json",
+    "description": "Grantora runtime status",
+    "type": "object",
+    "required": [
+        "configured",
+        "public_base_url",
+        "selected_user_domain",
+        "grantora_version",
+        "pod",
+        "units",
+        "containers",
+        "healthz",
+        "readyz",
+        "apisix_sync",
+        "running_upstream_version"
+    ],
+    "properties": {
+        "configured": {"type": "boolean"},
+        "public_base_url": {"type": "string"},
+        "selected_user_domain": {"type": "string"},
+        "grantora_version": {"type": "string"},
+        "pod": {"type": "object"},
+        "units": {"type": "object"},
+        "containers": {"type": "object"},
+        "healthz": {"type": "object"},
+        "readyz": {"type": "object"},
+        "apisix_sync": {"type": "object"},
+        "running_upstream_version": {"type": "string"}
+    }
+}

@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+
+STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", Path.home() / ".local/state")) / "state"
+
+
+def parse_envfile(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key] = value
+    return values
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Call Grantora Admin API inside the pod")
+    parser.add_argument("method", nargs="?", default="GET")
+    parser.add_argument("path", nargs="?", default="/v1/admin/apisix/status")
+    parser.add_argument("data", nargs="?", default=None)
+    args = parser.parse_args()
+
+    secrets_env = parse_envfile(STATE_DIR / "secrets.env")
+    token = secrets_env["ADMIN_BOOTSTRAP_TOKEN"]
+    request = {
+        "method": args.method.upper(),
+        "path": args.path,
+        "data": json.loads(args.data) if args.data else None,
+        "token": token,
+    }
+    script = r'''
+import json
+import sys
+import urllib.error
+import urllib.request
+
+request = json.load(sys.stdin)
+body = None
+headers = {"Authorization": "Bearer " + request["token"]}
+if request["data"] is not None:
+    body = json.dumps(request["data"]).encode("utf-8")
+    headers["Content-Type"] = "application/json"
+url = "http://127.0.0.1:8080" + request["path"]
+api_request = urllib.request.Request(url, data=body, headers=headers, method=request["method"])
+try:
+    with urllib.request.urlopen(api_request, timeout=10) as response:
+        sys.stdout.buffer.write(response.read())
+except urllib.error.HTTPError as exc:
+    sys.stderr.buffer.write(exc.read())
+    sys.exit(exc.code if exc.code < 128 else 1)
+'''
+    subprocess.run(
+        ["podman", "exec", "-i", "grantora-api", "python", "-c", script],
+        input=json.dumps(request),
+        text=True,
+        check=True,
+    )
+
+
+if __name__ == "__main__":
+    main()

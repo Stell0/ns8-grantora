@@ -412,25 +412,25 @@ Objective: configure host, generated secrets, pod env files, Traefik route and A
 
 Tasks:
 
-- [ ] Implement `get-defaults` with secure defaults and generated runtime values.
-- [ ] Implement `configure-module` JSON schema.
-- [ ] Validate hostnames, retention values, rate limits, timeout values and image tags.
-- [ ] Generate missing secrets only once; preserve them across reconfigure.
-- [ ] Compute `GRANTORA_ADMIN_BOOTSTRAP_TOKEN_HASH` from the module-only `ADMIN_BOOTSTRAP_TOKEN` and `GRANTORA_AGENT_TOKEN_PEPPER`.
-- [ ] Render `grantora.env`, `postgres.env`, `apisix.env`, `apisix-config.yaml` and `runtime.env`.
-- [ ] Start/restart `grantora.service`.
-- [ ] Configure an NS8 Traefik route from `https://<host>/` to `http://127.0.0.1:${TCP_PORT}`.
-- [ ] Set `GRANTORA_PUBLIC_BASE_URL=https://<host>`.
-- [ ] Call `POST /v1/admin/apisix/sync` through `grantora-admin`, not a host-mapped admin port.
-- [ ] Implement `get-status` with:
-  - [ ] pod status;
-  - [ ] each container unit status;
-  - [ ] `/healthz` result;
-  - [ ] `/readyz` result;
-  - [ ] APISIX sync status;
-  - [ ] configured public URL;
-  - [ ] selected user domain;
-  - [ ] running upstream version.
+- [x] Implement `get-defaults` with secure defaults and generated runtime values.
+- [x] Implement `configure-module` JSON schema.
+- [x] Validate hostnames, retention values, rate limits, timeout values and image tags.
+- [x] Generate missing secrets only once; preserve them across reconfigure.
+- [x] Compute `GRANTORA_ADMIN_BOOTSTRAP_TOKEN_HASH` from the module-only `ADMIN_BOOTSTRAP_TOKEN` and `GRANTORA_AGENT_TOKEN_PEPPER`.
+- [x] Render `grantora.env`, `postgres.env`, `apisix.env`, `apisix-config.yaml` and `runtime.env`.
+- [x] Start/restart `grantora.service`.
+- [x] Configure an NS8 Traefik route from `https://<host>/` to `http://127.0.0.1:${TCP_PORT}`.
+- [x] Set `GRANTORA_PUBLIC_BASE_URL=https://<host>`.
+- [x] Call `POST /v1/admin/apisix/sync` through `grantora-admin`, not a host-mapped admin port.
+- [x] Implement `get-status` with:
+  - [x] pod status;
+  - [x] each container unit status;
+  - [x] `/healthz` result;
+  - [x] `/readyz` result;
+  - [x] APISIX sync status;
+  - [x] configured public URL;
+  - [x] selected user domain;
+  - [x] running upstream version.
 
 Acceptance:
 

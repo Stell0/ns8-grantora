@@ -9,6 +9,33 @@ set -e
 
 cat >/dev/null
 
+python3 - <<'PY' || true
+import json
+import os
+from pathlib import Path
+
+route_file = Path(os.environ.get("STATE_DIRECTORY", Path.home() / ".local/state")) / "state" / "route.json"
+try:
+	route = json.loads(route_file.read_text(encoding="utf-8"))
+except Exception:
+	route = {"instance": os.environ.get("MODULE_ID", "grantora")}
+
+try:
+	import agent
+except ImportError:
+	agent = None
+
+if agent is not None and hasattr(agent, "delete_route"):
+	agent.delete_route(
+		{
+			"instance": route.get("instance", os.environ.get("MODULE_ID", "grantora")),
+			"lets_encrypt_cleanup": True,
+		}
+	)
+
+route_file.unlink(missing_ok=True)
+PY
+
 systemctl --user disable --now grantora.service || true
 systemctl --user stop grantora-apisix.service grantora-api.service || true
 systemctl --user stop grantora-apisix-etcd.service grantora-postgres.service || true

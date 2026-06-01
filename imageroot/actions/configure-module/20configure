@@ -6,6 +6,7 @@
 #
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -14,3 +15,27 @@ config = json.load(sys.stdin)
 helper = Path(__file__).resolve().parents[2] / "bin" / "grantora-env"
 
 subprocess.run([helper, "configure"], input=json.dumps(config), text=True, check=True)
+
+result = subprocess.run([helper, "status"], text=True, check=True, capture_output=True)
+state = json.loads(result.stdout)
+route_data = {
+    "instance": os.environ.get("MODULE_ID", "grantora"),
+    "url": f"http://127.0.0.1:{state['tcp_port']}",
+    "host": config["host"],
+    "http2https": True,
+    "lets_encrypt": bool(config.get("lets_encrypt", True)),
+    "lets_encrypt_check": bool(config.get("lets_encrypt", True)),
+    "lets_encrypt_cleanup": True,
+}
+
+state_dir = Path(os.environ.get("STATE_DIRECTORY", Path.home() / ".local/state")) / "state"
+state_dir.mkdir(parents=True, exist_ok=True)
+(state_dir / "route.json").write_text(json.dumps(route_data, sort_keys=True), encoding="utf-8")
+
+try:
+    import agent
+except ImportError:
+    agent = None
+
+if agent is not None and os.environ.get("GRANTORA_SKIP_AGENT_ROUTE") != "1":
+    agent.set_route(route_data)

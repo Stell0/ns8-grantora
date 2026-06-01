@@ -1,0 +1,8 @@
+#!/bin/bash
+
+set -euo pipefail
+
+container="${1:-grantora-api}"
+shift || true
+
+exec podman exec "${container}" "$@"

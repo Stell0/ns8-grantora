@@ -1,0 +1,43 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "get-defaults output",
+    "$id": "http://schema.nethserver.org/grantora/get-defaults-output.json",
+    "description": "Default Grantora runtime configuration values",
+    "type": "object",
+    "required": [
+        "host",
+        "grantora_image",
+        "grantora_version",
+        "metrics_enabled",
+        "log_level",
+        "runtime_rate_limit_count",
+        "runtime_rate_limit_time_window",
+        "audit_retention_days",
+        "usage_retention_days",
+        "upstream_tls_verify",
+        "upstream_timeout_seconds",
+        "upstream_connect_timeout_seconds",
+        "upstream_max_response_bytes",
+        "upstream_read_retry_attempts",
+        "tcp_port",
+        "lets_encrypt"
+    ],
+    "properties": {
+        "host": {"type": "string"},
+        "grantora_image": {"type": "string"},
+        "grantora_version": {"type": "string"},
+        "metrics_enabled": {"type": "boolean"},
+        "log_level": {"type": "string"},
+        "runtime_rate_limit_count": {"type": "integer"},
+        "runtime_rate_limit_time_window": {"type": "integer"},
+        "audit_retention_days": {"type": "integer"},
+        "usage_retention_days": {"type": "integer"},
+        "upstream_tls_verify": {"type": "boolean"},
+        "upstream_timeout_seconds": {"type": "integer"},
+        "upstream_connect_timeout_seconds": {"type": "integer"},
+        "upstream_max_response_bytes": {"type": "integer"},
+        "upstream_read_retry_attempts": {"type": "integer"},
+        "tcp_port": {"type": "integer"},
+        "lets_encrypt": {"type": "boolean"}
+    }
+}
