@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+
+helper = Path(__file__).resolve().parents[2] / "bin" / "grantora-users"
+result = subprocess.run([helper, "sync"], text=True, check=True, capture_output=True)
+json.dump(json.loads(result.stdout), fp=sys.stdout)

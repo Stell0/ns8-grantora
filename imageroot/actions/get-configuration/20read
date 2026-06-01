@@ -10,8 +10,16 @@ import subprocess
 import sys
 from pathlib import Path
 
-helper = Path(__file__).resolve().parents[2] / "bin" / "grantora-env"
+bin_dir = Path(__file__).resolve().parents[2] / "bin"
+helper = bin_dir / "grantora-env"
+users_helper = bin_dir / "grantora-users"
 result = subprocess.run([helper, "status"], text=True, check=True, capture_output=True)
 config = json.loads(result.stdout)
+domains_result = subprocess.run([users_helper, "domains"], text=True, check=True, capture_output=True)
+domains = json.loads(domains_result.stdout)
+sync_result = subprocess.run([users_helper, "status"], text=True, check=True, capture_output=True)
 
+config["available_user_domains"] = domains.get("domains", [])
+config["user_domain_discovery_error"] = domains.get("error", "")
+config["user_sync"] = json.loads(sync_result.stdout)
 json.dump(config, fp=sys.stdout)

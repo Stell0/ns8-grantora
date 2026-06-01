@@ -1,0 +1,18 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "sync-users output",
+    "$id": "http://schema.nethserver.org/grantora/sync-users-output.json",
+    "type": "object",
+    "required": ["domain", "workspace_id", "imported", "reactivated", "disabled", "seen", "errors", "last_sync"],
+    "properties": {
+        "domain": {"type": "string"},
+        "workspace_id": {"type": "string"},
+        "imported": {"type": "integer"},
+        "reactivated": {"type": "integer"},
+        "disabled": {"type": "integer"},
+        "seen": {"type": "integer"},
+        "errors": {"type": "integer"},
+        "error_details": {"type": "array"},
+        "last_sync": {"type": "integer"}
+    }
+}

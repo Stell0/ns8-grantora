@@ -9,6 +9,7 @@ from pathlib import Path
 
 HELPER = Path(__file__).resolve().parent / "grantora-env"
 ADMIN_HELPER = Path(__file__).resolve().parent / "grantora-admin"
+USERS_HELPER = Path(__file__).resolve().parent / "grantora-users"
 STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", Path.home() / ".local/state")) / "state"
 UNITS = [
     "grantora.service",
@@ -17,6 +18,8 @@ UNITS = [
     "grantora-apisix-etcd.service",
     "grantora-api.service",
     "grantora-apisix.service",
+    "grantora-user-sync.timer",
+    "grantora-user-sync.service",
 ]
 
 
@@ -102,6 +105,16 @@ def admin_get(path: str) -> dict[str, object]:
         return {"ok": True, "body": result.stdout}
 
 
+def user_sync_status() -> dict[str, object]:
+    result = command([USERS_HELPER, "status"])
+    if result.returncode != 0:
+        return {"error": result.stderr.strip() or "not_available"}
+    try:
+        return json.loads(result.stdout or "{}")
+    except json.JSONDecodeError:
+        return {"error": "invalid_status"}
+
+
 def main() -> None:
     env_result = subprocess.run([HELPER, "status"], text=True, check=True, capture_output=True)
     config = json.loads(env_result.stdout)
@@ -115,6 +128,7 @@ def main() -> None:
         "configured": config["configured"],
         "public_base_url": config["public_base_url"],
         "selected_user_domain": config.get("ldap_user_domain", ""),
+        "sync_users_enabled": config.get("sync_users_enabled", False),
         "grantora_version": config["grantora_version"],
         "pod": {"name": "grantora", "state": pod_state()},
         "units": {unit: unit_state(unit) for unit in UNITS},
@@ -122,6 +136,7 @@ def main() -> None:
         "healthz": api_get("/healthz"),
         "readyz": api_get("/readyz"),
         "apisix_sync": admin_get("/v1/admin/apisix/status"),
+        "user_sync": user_sync_status(),
     }
     health_body = output["healthz"].get("body")
     if isinstance(health_body, dict) and health_body.get("version"):

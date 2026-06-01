@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+
+helper = Path(__file__).resolve().parents[2] / "bin" / "grantora-env"
+event = json.load(sys.stdin)
+config = json.loads(subprocess.run([helper, "status"], text=True, check=True, capture_output=True).stdout)
+module_id = os.environ.get("MODULE_ID")
+
+if module_id and module_id not in event.get("modules", []):
+    sys.exit(0)
+if config.get("ldap_user_domain") not in event.get("domains", []):
+    sys.exit(0)
+if not config.get("sync_users_enabled"):
+    sys.exit(0)
+
+subprocess.run(["systemctl", "--user", "start", "grantora-user-sync.service"], check=False)

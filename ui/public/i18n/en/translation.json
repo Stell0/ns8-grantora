@@ -18,13 +18,27 @@
         "mount": "Mount",
         "no_services": "No services",
         "no_images": "No images",
-        "no_volumes": "No volumes"
+        "no_volumes": "No volumes",
+        "user_sync": "User sync",
+        "selected_user_domain": "Selected user domain",
+        "last_sync": "Last sync",
+        "imported": "Imported",
+        "disabled": "Disabled",
+        "errors": "Errors",
+        "sync_users_now": "Sync users now"
     },
     "settings": {
         "title": "Settings",
         "configure_instance": "Configure {instance}",
         "save": "Save",
-        "test_field": "Test field"
+        "host": "Public hostname",
+        "host_placeholder": "grantora.example.org",
+        "lets_encrypt": "Request Let's Encrypt certificate",
+        "user_domain": "User domain",
+        "choose_user_domain": "Choose a user domain",
+        "no_user_domain": "No user domain",
+        "sync_users_enabled": "Sync LDAP users into Grantora",
+        "sync_users_interval_minutes": "Sync interval in minutes"
     },
     "about": {
         "title": "About"
@@ -36,6 +50,7 @@
         "get-status": "Get status",
         "get-configuration": "Get configuration",
         "configure-module": "Configure module",
+        "sync-users": "Sync users",
         "get-module-info": "Get module info",
         "get-name": "Get name",
         "list-backup-repositories": "List backup repositories",

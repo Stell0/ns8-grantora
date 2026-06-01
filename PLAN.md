@@ -452,22 +452,22 @@ Objective: allow the Grantora admin in NS8 UI to select one installed NS8 user p
 
 Tasks:
 
-- [ ] Implement domain discovery helper in `imageroot/bin/` or an action fragment using `agent.ldapproxy`.
-- [ ] Return available user domains from `get-configuration`.
-- [ ] Add `user_domain` field to `configure-module`.
-- [ ] Bind the module to the selected domain with `agent.bind_user_domains([domain])`.
-- [ ] Persist selected domain and sync settings.
-- [ ] Implement `sync-users` action:
-  - [ ] load selected domain connection parameters;
-  - [ ] list visible users with `agent.ldapclient`;
-  - [ ] create missing Grantora users through Admin API;
-  - [ ] disable missing/hidden users when the module owns them;
-  - [ ] record sync summary in `state/user-domain.json`.
-- [ ] Add `grantora-user-sync.timer` and `grantora-user-sync.service`.
-- [ ] Add `events/user-domain-changed/` handler.
-- [ ] Add `events/module-domain-changed/` handler.
-- [ ] Add admin UI button: `Sync users now`.
-- [ ] Add UI state: last sync, imported count, disabled count, error count.
+- [x] Implement domain discovery helper in `imageroot/bin/` or an action fragment using `agent.ldapproxy`.
+- [x] Return available user domains from `get-configuration`.
+- [x] Add `user_domain` field to `configure-module`.
+- [x] Bind the module to the selected domain with `agent.bind_user_domains([domain])`.
+- [x] Persist selected domain and sync settings.
+- [x] Implement `sync-users` action:
+  - [x] load selected domain connection parameters;
+  - [x] list visible users with `agent.ldapclient`;
+  - [x] create missing Grantora users through Admin API;
+  - [x] disable missing/hidden users when the module owns them;
+  - [x] record sync summary in `state/user-domain.json`.
+- [x] Add `grantora-user-sync.timer` and `grantora-user-sync.service`.
+- [x] Add `events/user-domain-changed/` handler.
+- [x] Add `events/module-domain-changed/` handler.
+- [x] Add admin UI button: `Sync users now`.
+- [x] Add UI state: last sync, imported count, disabled count, error count.
 
 Acceptance:
 

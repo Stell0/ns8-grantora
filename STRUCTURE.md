@@ -17,14 +17,17 @@ Current repository map for `ns8-grantora` during the pod-based runtime packaging
 
 - `actions/configure-module/`: renders runtime state/env files and restarts `grantora.service`.
 - `actions/get-configuration/`: returns safe runtime skeleton configuration and generated-file presence.
+- `actions/sync-users/`: syncs the selected NS8 user domain into Grantora users through pod-local Admin API calls.
 - `actions/destroy-module/`: stops the aggregate service and helper units.
 - `bin/grantora-env`: idempotent state, secret, and env-file renderer for the runtime skeleton.
+- `bin/grantora-users`: NS8 account-domain discovery, binding, sync and sync-status helper.
 - `systemd/user/grantora.service`: aggregate Grantora service.
 - `systemd/user/grantora-pod.service`: owns pod `grantora` and the only host port mapping, `127.0.0.1:${TCP_PORT}:9080`.
 - `systemd/user/grantora-postgres.service`: PostgreSQL helper container in the pod.
 - `systemd/user/grantora-apisix-etcd.service`: APISIX etcd helper container in the pod.
 - `systemd/user/grantora-api.service`: upstream Grantora API container in the pod.
 - `systemd/user/grantora-apisix.service`: APISIX runtime/data-plane container in the pod.
+- `systemd/user/grantora-user-sync.timer` and `grantora-user-sync.service`: periodic LDAP user sync.
 
 ## Target expansion
 

@@ -12,7 +12,13 @@ import sys
 from pathlib import Path
 
 config = json.load(sys.stdin)
-helper = Path(__file__).resolve().parents[2] / "bin" / "grantora-env"
+bin_dir = Path(__file__).resolve().parents[2] / "bin"
+helper = bin_dir / "grantora-env"
+users_helper = bin_dir / "grantora-users"
+
+if config.get("sync_users_enabled") and not config.get("user_domain"):
+    print("user_domain is required when sync_users_enabled is true", file=sys.stderr)
+    sys.exit(2)
 
 subprocess.run([helper, "configure"], input=json.dumps(config), text=True, check=True)
 
@@ -39,3 +45,6 @@ except ImportError:
 
 if agent is not None and os.environ.get("GRANTORA_SKIP_AGENT_ROUTE") != "1":
     agent.set_route(route_data)
+
+if "user_domain" in config:
+    subprocess.run([users_helper, "bind", config.get("user_domain", "")], text=True, check=True)

@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+
+import json
+import subprocess
+from pathlib import Path
+
+
+helper = Path(__file__).resolve().parents[2] / "bin" / "grantora-env"
+config = json.loads(subprocess.run([helper, "status"], text=True, check=True, capture_output=True).stdout)
+
+dropin_dir = Path.home() / ".config/systemd/user/grantora-user-sync.timer.d"
+dropin_dir.mkdir(parents=True, exist_ok=True)
+(dropin_dir / "interval.conf").write_text(
+    "[Timer]\n"
+    "OnUnitActiveSec=\n"
+    f"OnUnitActiveSec={config.get('sync_users_interval_minutes', 60)}min\n",
+    encoding="utf-8",
+)
+
+subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
+if config.get("sync_users_enabled"):
+    subprocess.run(["systemctl", "--user", "enable", "--now", "grantora-user-sync.timer"], check=False)
+else:
+    subprocess.run(["systemctl", "--user", "disable", "--now", "grantora-user-sync.timer"], check=False)

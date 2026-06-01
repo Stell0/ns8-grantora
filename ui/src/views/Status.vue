@@ -39,6 +39,16 @@
         />
       </cv-column>
     </cv-row>
+    <cv-row v-if="error.syncUsers">
+      <cv-column>
+        <NsInlineNotification
+          kind="error"
+          :title="$t('action.sync-users')"
+          :description="error.syncUsers"
+          :showCloseButton="false"
+        />
+      </cv-column>
+    </cv-row>
     <cv-row>
       <cv-column :md="4" :max="4">
         <NsInfoCard
@@ -103,6 +113,56 @@
           :moduleId="instanceName"
           light
         />
+      </cv-column>
+    </cv-row>
+    <cv-row>
+      <cv-column class="page-subtitle">
+        <h4>{{ $t("status.user_sync") }}</h4>
+      </cv-column>
+    </cv-row>
+    <cv-row>
+      <cv-column>
+        <cv-tile light>
+          <div v-if="!loading.getStatus">
+            <div class="key-value-setting">
+              <span class="label">{{ $t("status.selected_user_domain") }}</span>
+              <span class="value">{{
+                status.selected_user_domain || "-"
+              }}</span>
+            </div>
+            <div class="key-value-setting">
+              <span class="label">{{ $t("status.last_sync") }}</span>
+              <span class="value">{{
+                formatTimestamp(status.user_sync.last_sync)
+              }}</span>
+            </div>
+            <div class="key-value-setting">
+              <span class="label">{{ $t("status.imported") }}</span>
+              <span class="value">{{ status.user_sync.imported || 0 }}</span>
+            </div>
+            <div class="key-value-setting">
+              <span class="label">{{ $t("status.disabled") }}</span>
+              <span class="value">{{ status.user_sync.disabled || 0 }}</span>
+            </div>
+            <div class="key-value-setting">
+              <span class="label">{{ $t("status.errors") }}</span>
+              <span class="value">{{ status.user_sync.errors || 0 }}</span>
+            </div>
+            <NsButton
+              kind="secondary"
+              :icon="Renew20"
+              :loading="loading.syncUsers"
+              :disabled="loading.syncUsers || !status.sync_users_enabled"
+              @click="syncUsers"
+              >{{ $t("status.sync_users_now") }}</NsButton
+            >
+          </div>
+          <cv-skeleton-text
+            v-else
+            :paragraph="true"
+            :line-count="4"
+          ></cv-skeleton-text>
+        </cv-tile>
       </cv-column>
     </cv-row>
     <!-- services -->
@@ -287,6 +347,9 @@ export default {
       redirectTimeout: 0,
       status: {
         instance: "",
+        sync_users_enabled: false,
+        selected_user_domain: "",
+        user_sync: {},
         services: [],
         images: [],
         volumes: [],
@@ -295,11 +358,13 @@ export default {
       backups: [],
       loading: {
         getStatus: false,
+        syncUsers: false,
         listBackupRepositories: false,
         listBackups: false,
       },
       error: {
         getStatus: "",
+        syncUsers: "",
         listBackupRepositories: "",
         listBackups: "",
       },
@@ -394,7 +459,58 @@ export default {
     },
     getStatusCompleted(taskContext, taskResult) {
       this.status = taskResult.output;
+      if (!this.status.user_sync) {
+        this.status.user_sync = {};
+      }
       this.loading.getStatus = false;
+    },
+    async syncUsers() {
+      this.loading.syncUsers = true;
+      this.error.syncUsers = "";
+      const taskAction = "sync-users";
+      const eventId = this.getUuid();
+
+      this.core.$root.$once(
+        `${taskAction}-aborted-${eventId}`,
+        this.syncUsersAborted
+      );
+      this.core.$root.$once(
+        `${taskAction}-completed-${eventId}`,
+        this.syncUsersCompleted
+      );
+
+      const res = await to(
+        this.createModuleTaskForApp(this.instanceName, {
+          action: taskAction,
+          extra: {
+            title: this.$t("action." + taskAction),
+            description: this.$t("common.processing"),
+            eventId,
+          },
+        })
+      );
+      const err = res[0];
+
+      if (err) {
+        console.error(`error creating task ${taskAction}`, err);
+        this.error.syncUsers = this.getErrorMessage(err);
+        this.loading.syncUsers = false;
+      }
+    },
+    syncUsersAborted(taskResult, taskContext) {
+      console.error(`${taskContext.action} aborted`, taskResult);
+      this.error.syncUsers = this.$t("error.generic_error");
+      this.loading.syncUsers = false;
+    },
+    syncUsersCompleted() {
+      this.loading.syncUsers = false;
+      this.getStatus();
+    },
+    formatTimestamp(timestamp) {
+      if (!timestamp) {
+        return "-";
+      }
+      return new Date(timestamp * 1000).toLocaleString();
     },
     async listBackupRepositories() {
       this.loading.listBackupRepositories = true;

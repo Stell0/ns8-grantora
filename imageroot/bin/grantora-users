@@ -1,0 +1,286 @@
+#!/usr/bin/env python3
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+from urllib.parse import urlencode
+
+
+STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", Path.home() / ".local/state")) / "state"
+ADMIN_HELPER = Path(__file__).resolve().parent / "grantora-admin"
+
+
+def parse_envfile(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not path.exists():
+        return values
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key] = value
+    return values
+
+
+def load_json(path: Path, default: object) -> object:
+    if not path.exists():
+        return default
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return default
+
+
+def write_json(path: Path, value: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, sort_keys=True), encoding="utf-8")
+
+
+def selected_domain() -> str:
+    return parse_envfile(STATE_DIR / "environment").get("LDAP_USER_DOMAIN", "")
+
+
+def sanitized_domain(name: str, domain: dict[str, object], current: str) -> dict[str, object]:
+    providers = domain.get("providers", [])
+    provider = providers[0] if isinstance(providers, list) and providers else {}
+    if not isinstance(provider, dict):
+        provider = {}
+    return {
+        "name": name,
+        "schema": str(domain.get("schema", "")),
+        "location": str(domain.get("location", "")),
+        "provider_module": str(provider.get("id") or provider.get("module_id") or ""),
+        "reachable": bool(domain.get("host") and domain.get("port")),
+        "selected": name == current,
+    }
+
+
+def discover_domains() -> dict[str, object]:
+    try:
+        from agent.ldapproxy import Ldapproxy
+    except ImportError:
+        return {"domains": [], "error": "agent_module_unavailable"}
+
+    current = selected_domain()
+    try:
+        ldapproxy = Ldapproxy()
+        domains = []
+        for name in ldapproxy.get_domains_list():
+            domain = ldapproxy.get_domain(name) or {}
+            domains.append(sanitized_domain(name, domain, current))
+        domains.sort(key=lambda item: item["name"])
+        return {"domains": domains, "error": ""}
+    except Exception as exc:
+        return {"domains": [], "error": str(exc)}
+
+
+def bind_selected_domain(domain: str) -> bool:
+    if os.environ.get("GRANTORA_SKIP_AGENT_BIND") == "1":
+        return False
+    try:
+        import agent
+    except ImportError:
+        return False
+    return bool(agent.bind_user_domains([domain] if domain else [], check=False))
+
+
+def ldap_users(domain_name: str) -> list[dict[str, str]]:
+    from agent.ldapclient import Ldapclient
+    from agent.ldapproxy import Ldapproxy
+
+    domain = Ldapproxy().get_domain(domain_name)
+    if not domain:
+        raise RuntimeError(f"domain_not_found:{domain_name}")
+    users = Ldapclient.factory(**domain).list_users(extra_info=True)
+    normalized = []
+    for user in users:
+        if user.get("locked") is True:
+            continue
+        username = str(user.get("user") or user.get("uid") or user.get("name") or "").strip()
+        if not username:
+            continue
+        display_name = str(
+            user.get("display_name")
+            or user.get("cn")
+            or user.get("gecos")
+            or user.get("full_name")
+            or username
+        ).strip()
+        normalized.append(
+            {
+                "external_id": username,
+                "display_name": display_name or username,
+                "email": str(user.get("mail") or user.get("email") or ""),
+            }
+        )
+    normalized.sort(key=lambda item: item["external_id"].lower())
+    return normalized
+
+
+def admin_api(method: str, path: str, data: dict[str, object] | None = None) -> dict[str, object]:
+    args = [ADMIN_HELPER, method, path]
+    if data is not None:
+        args.append(json.dumps(data))
+    result = subprocess.run(args, text=True, capture_output=True, check=False)
+    if result.returncode != 0:
+        message = result.stderr.strip() or result.stdout.strip() or f"admin_api_failed:{result.returncode}"
+        raise RuntimeError(message)
+    if not result.stdout.strip():
+        return {}
+    return json.loads(result.stdout)
+
+
+def resolve_workspace_id() -> str:
+    bootstrap = load_json(STATE_DIR / "bootstrap.json", {})
+    if isinstance(bootstrap, dict):
+        for key in ("workspace_id", "default_workspace_id"):
+            if bootstrap.get(key):
+                return str(bootstrap[key])
+        workspace = bootstrap.get("workspace")
+        if isinstance(workspace, dict) and workspace.get("id"):
+            return str(workspace["id"])
+
+    response = admin_api("GET", "/v1/admin/workspaces?" + urlencode({"limit": 2}))
+    workspaces = response.get("workspaces", [])
+    if len(workspaces) == 1 and workspaces[0].get("id"):
+        return str(workspaces[0]["id"])
+    if not workspaces:
+        raise RuntimeError("no_active_workspace")
+    raise RuntimeError("multiple_active_workspaces")
+
+
+def paginated_users(workspace_id: str) -> list[dict[str, object]]:
+    users = []
+    limit = 500
+    offset = 0
+    while True:
+        query = urlencode(
+            {
+                "workspace_id": workspace_id,
+                "include_disabled": "true",
+                "limit": limit,
+                "offset": offset,
+            }
+        )
+        response = admin_api("GET", f"/v1/admin/users?{query}")
+        page = response.get("users", [])
+        users.extend(page)
+        if len(page) < limit:
+            return users
+        offset += limit
+
+
+def sync_users() -> dict[str, object]:
+    env = parse_envfile(STATE_DIR / "environment")
+    domain = env.get("LDAP_USER_DOMAIN", "")
+    if not domain:
+        raise RuntimeError("ldap_user_domain_not_configured")
+    if env.get("SYNC_USERS_ENABLED", "true") != "true":
+        raise RuntimeError("sync_users_disabled")
+
+    state = load_json(STATE_DIR / "user-domain.json", {})
+    if not isinstance(state, dict):
+        state = {}
+    previous_managed = set(state.get("managed_users", []))
+    workspace_id = resolve_workspace_id()
+    source_users = ldap_users(domain)
+    source_by_external_id = {user["external_id"]: user for user in source_users}
+    current_users = paginated_users(workspace_id)
+    current_by_external_id = {str(user.get("external_id")): user for user in current_users}
+
+    created = 0
+    reactivated = 0
+    disabled = 0
+    errors: list[dict[str, str]] = []
+
+    for external_id, source_user in source_by_external_id.items():
+        current = current_by_external_id.get(external_id)
+        try:
+            if current is None:
+                admin_api(
+                    "POST",
+                    "/v1/admin/users",
+                    {
+                        "workspace_id": workspace_id,
+                        "external_id": external_id,
+                        "display_name": source_user["display_name"],
+                        "status": "active",
+                    },
+                )
+                created += 1
+            elif current.get("status") == "disabled" and env.get("SYNC_REACTIVATE_USERS", "true") == "true":
+                admin_api("PATCH", f"/v1/admin/users/{current['id']}", {"status": "active"})
+                reactivated += 1
+        except Exception as exc:
+            errors.append({"external_id": external_id, "error": str(exc)})
+
+    if env.get("SYNC_DISABLE_MISSING", "true") == "true":
+        missing = previous_managed - set(source_by_external_id)
+        for external_id in sorted(missing):
+            current = current_by_external_id.get(external_id)
+            if not current or current.get("status") == "disabled":
+                continue
+            try:
+                admin_api("PATCH", f"/v1/admin/users/{current['id']}", {"status": "disabled"})
+                disabled += 1
+            except Exception as exc:
+                errors.append({"external_id": external_id, "error": str(exc)})
+
+    managed_users = sorted(previous_managed | set(source_by_external_id))
+    summary = {
+        "domain": domain,
+        "workspace_id": workspace_id,
+        "imported": created,
+        "reactivated": reactivated,
+        "disabled": disabled,
+        "seen": len(source_users),
+        "errors": len(errors),
+        "error_details": errors[:10],
+        "last_sync": int(time.time()),
+    }
+    state.update(summary)
+    state["managed_users"] = managed_users
+    write_json(STATE_DIR / "user-domain.json", state)
+    return summary
+
+
+def status() -> dict[str, object]:
+    state = load_json(STATE_DIR / "user-domain.json", {})
+    if not isinstance(state, dict):
+        state = {}
+    return {
+        "domain": state.get("domain", selected_domain()),
+        "workspace_id": state.get("workspace_id", ""),
+        "last_sync": state.get("last_sync", 0),
+        "imported": state.get("imported", 0),
+        "reactivated": state.get("reactivated", 0),
+        "disabled": state.get("disabled", 0),
+        "seen": state.get("seen", 0),
+        "errors": state.get("errors", 0),
+        "error_details": state.get("error_details", []),
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Grantora NS8 user-domain helpers")
+    parser.add_argument("command", choices=["domains", "bind", "sync", "status"])
+    parser.add_argument("domain", nargs="?", default="")
+    args = parser.parse_args()
+
+    if args.command == "domains":
+        json.dump(discover_domains(), sys.stdout)
+    elif args.command == "bind":
+        json.dump({"bound": bind_selected_domain(args.domain or selected_domain())}, sys.stdout)
+    elif args.command == "sync":
+        json.dump(sync_users(), sys.stdout)
+    else:
+        json.dump(status(), sys.stdout)
+
+
+if __name__ == "__main__":
+    main()

@@ -8,6 +8,7 @@
         "configured",
         "public_base_url",
         "selected_user_domain",
+        "sync_users_enabled",
         "grantora_version",
         "pod",
         "units",
@@ -15,12 +16,14 @@
         "healthz",
         "readyz",
         "apisix_sync",
+        "user_sync",
         "running_upstream_version"
     ],
     "properties": {
         "configured": {"type": "boolean"},
         "public_base_url": {"type": "string"},
         "selected_user_domain": {"type": "string"},
+        "sync_users_enabled": {"type": "boolean"},
         "grantora_version": {"type": "string"},
         "pod": {"type": "object"},
         "units": {"type": "object"},
@@ -28,6 +31,7 @@
         "healthz": {"type": "object"},
         "readyz": {"type": "object"},
         "apisix_sync": {"type": "object"},
+        "user_sync": {"type": "object"},
         "running_upstream_version": {"type": "string"}
     }
 }

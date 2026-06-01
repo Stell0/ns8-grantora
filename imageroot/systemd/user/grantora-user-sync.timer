@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Grantora LDAP user sync periodically
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=60min
+Unit=grantora-user-sync.service
+
+[Install]
+WantedBy=timers.target

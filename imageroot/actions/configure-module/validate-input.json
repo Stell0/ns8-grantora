@@ -18,8 +18,15 @@
             "type": "boolean"
         },
         "user_domain": {
-            "type": "string",
-            "minLength": 1
+            "type": "string"
+        },
+        "sync_users_enabled": {
+            "type": "boolean"
+        },
+        "sync_users_interval_minutes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1440
         },
         "grantora_image": {
             "type": "string",

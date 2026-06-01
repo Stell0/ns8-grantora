@@ -1,0 +1,8 @@
+[Unit]
+Description=Grantora LDAP user sync
+After=grantora-api.service
+Requires=grantora-api.service
+
+[Service]
+Type=oneshot
+ExecStart=grantora-users sync

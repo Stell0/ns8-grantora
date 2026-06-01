@@ -23,14 +23,40 @@
       <cv-column>
         <cv-tile light>
           <cv-form @submit.prevent="configureModule">
-            <!-- TODO remove test field and code configuration fields -->
             <cv-text-input
-              :label="$t('settings.test_field')"
-              v-model="testField"
-              :placeholder="$t('settings.test_field')"
-              :disabled="loading.getConfiguration || loading.configureModule"
-              :invalid-message="error.testField"
-              ref="testField"
+              :label="$t('settings.host')"
+              v-model.trim="host"
+              :placeholder="$t('settings.host_placeholder')"
+              :disabled="loadingUi"
+              :invalid-message="error.host"
+              ref="host"
+            ></cv-text-input>
+            <cv-checkbox
+              v-model="letsEncrypt"
+              :label="$t('settings.lets_encrypt')"
+              :disabled="loadingUi"
+            />
+            <NsComboBox
+              v-model="userDomain"
+              :options="domainOptions"
+              :title="$t('settings.user_domain')"
+              :label="$t('settings.choose_user_domain')"
+              :disabled="loadingUi || !domainOptions.length"
+              :invalid-message="error.userDomain"
+              auto-highlight
+              ref="userDomain"
+            />
+            <cv-checkbox
+              v-model="syncUsersEnabled"
+              :label="$t('settings.sync_users_enabled')"
+              :disabled="loadingUi"
+            />
+            <cv-text-input
+              :label="$t('settings.sync_users_interval_minutes')"
+              v-model.number="syncUsersIntervalMinutes"
+              :disabled="loadingUi || !syncUsersEnabled"
+              :invalid-message="error.syncUsersIntervalMinutes"
+              ref="syncUsersIntervalMinutes"
             ></cv-text-input>
             <cv-row v-if="error.configureModule">
               <cv-column>
@@ -46,7 +72,7 @@
               kind="primary"
               :icon="Save20"
               :loading="loading.configureModule"
-              :disabled="loading.getConfiguration || loading.configureModule"
+              :disabled="loadingUi"
               >{{ $t("settings.save") }}</NsButton
             >
           </cv-form>
@@ -85,7 +111,12 @@ export default {
         page: "settings",
       },
       urlCheckInterval: null,
-      testField: "", // TODO remove
+      host: "",
+      letsEncrypt: true,
+      userDomain: "-",
+      userDomains: [],
+      syncUsersEnabled: false,
+      syncUsersIntervalMinutes: 60,
       loading: {
         getConfiguration: false,
         configureModule: false,
@@ -93,13 +124,30 @@ export default {
       error: {
         getConfiguration: "",
         configureModule: "",
-        testField: "", // TODO remove
-        // TODO add all validation error fields
+        host: "",
+        userDomain: "",
+        syncUsersIntervalMinutes: "",
       },
     };
   },
   computed: {
     ...mapState(["instanceName", "core", "appName"]),
+    loadingUi() {
+      return this.loading.getConfiguration || this.loading.configureModule;
+    },
+    domainOptions() {
+      const domains = this.userDomains.map((domain) => ({
+        name: domain.name,
+        label: domain.name,
+        value: domain.name,
+      }));
+      domains.unshift({
+        name: "no_user_domain",
+        label: this.$t("settings.no_user_domain"),
+        value: "-",
+      });
+      return domains;
+    },
   },
   beforeRouteEnter(to, from, next) {
     next((vm) => {
@@ -160,27 +208,42 @@ export default {
     getConfigurationCompleted(taskContext, taskResult) {
       this.loading.getConfiguration = false;
       const config = taskResult.output;
-
-      // TODO set configuration fields
-      // ...
-
-      // TODO remove
-      console.log("config", config);
-
-      // TODO focus first configuration field
-      this.focusElement("testField");
+      this.host = config.host || "";
+      this.letsEncrypt = Boolean(config.lets_encrypt);
+      this.userDomains = config.available_user_domains || [];
+      this.userDomain = config.ldap_user_domain || "-";
+      this.syncUsersEnabled = Boolean(config.sync_users_enabled);
+      this.syncUsersIntervalMinutes = config.sync_users_interval_minutes || 60;
+      this.focusElement("host");
     },
     validateConfigureModule() {
       this.clearErrors(this);
       let isValidationOk = true;
 
-      // TODO remove testField and validate configuration fields
-      if (!this.testField) {
-        // test field cannot be empty
-        this.error.testField = this.$t("common.required");
+      if (!this.host) {
+        this.error.host = this.$t("common.required");
 
         if (isValidationOk) {
-          this.focusElement("testField");
+          this.focusElement("host");
+          isValidationOk = false;
+        }
+      }
+      if (this.syncUsersEnabled && this.userDomain === "-") {
+        this.error.userDomain = this.$t("common.required");
+
+        if (isValidationOk) {
+          this.focusElement("userDomain");
+          isValidationOk = false;
+        }
+      }
+      if (
+        this.syncUsersEnabled &&
+        (!this.syncUsersIntervalMinutes || this.syncUsersIntervalMinutes < 1)
+      ) {
+        this.error.syncUsersIntervalMinutes = this.$t("common.required");
+
+        if (isValidationOk) {
+          this.focusElement("syncUsersIntervalMinutes");
           isValidationOk = false;
         }
       }
@@ -236,7 +299,11 @@ export default {
         this.createModuleTaskForApp(this.instanceName, {
           action: taskAction,
           data: {
-            // TODO configuration fields
+            host: this.host,
+            lets_encrypt: this.letsEncrypt,
+            user_domain: this.userDomain === "-" ? "" : this.userDomain,
+            sync_users_enabled: this.syncUsersEnabled,
+            sync_users_interval_minutes: Number(this.syncUsersIntervalMinutes),
           },
           extra: {
             title: this.$t("settings.configure_instance", {
