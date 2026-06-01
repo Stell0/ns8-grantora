@@ -1,6 +1,6 @@
 module.exports = {
   publicPath: "./",
-  // added to fix the build of https://github.com/NethServer/ns8-kickstart/pull/114
+  // Keep the current NS8 Vue build compatible with the axios dependency tree.
   transpileDependencies: ["axios"],
   configureWebpack: {
     optimization: {

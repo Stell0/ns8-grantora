@@ -1,19 +1,19 @@
 {
-  "name": "kickstart",
+  "name": "grantora",
   "description": {
-    "en": "My kickstart module"
+    "en": "Grantora Agent Capability Gateway for NethServer 8"
   },
   "categories": [],
   "authors": [
     {
-      "name": "Name Surname",
-      "email": "author@yourmail.org"
+      "name": "Stell0",
+      "email": "opensource@nethserver.org"
     }
   ],
   "docs": {
-    "documentation_url": "https://docs.kickstart.com/",
+    "documentation_url": "https://github.com/Stell0/ns8-grantora/blob/main/README.md",
     "bug_url": "https://github.com/NethServer/dev",
-    "code_url": "https://github.com/author/ns8-kickstart"
+    "code_url": "https://github.com/Stell0/ns8-grantora"
   },
-  "source": "ghcr.io/nethserver/kickstart"
+  "source": "ghcr.io/nethserver/grantora"
 }

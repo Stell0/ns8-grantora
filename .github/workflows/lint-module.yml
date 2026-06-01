@@ -1,0 +1,71 @@
+name: Lint module
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install markdownlint
+        run: npm install --global markdownlint-cli
+
+      - name: Check markdown
+        run: markdownlint $(git ls-files '*.md')
+
+      - name: Install shell and JSON tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq shellcheck
+
+      - name: Lint shell scripts
+        run: |
+          mapfile -t shell_files < <(
+            git ls-files | while read -r file; do
+              [[ -f "$file" ]] || continue
+              if head -n 1 "$file" | grep -Eq '^#!/(usr/bin/env )?(ba)?sh'; then
+                printf '%s\n' "$file"
+              fi
+            done
+          )
+          if (( ${#shell_files[@]} )); then
+            shellcheck -x "${shell_files[@]}"
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Ruff
+        run: python -m pip install --upgrade pip ruff
+
+      - name: Lint Python helpers
+        run: |
+          mapfile -t python_files < <(
+            git ls-files | while read -r file; do
+              [[ -f "$file" ]] || continue
+              if head -n 1 "$file" | grep -Eq '^#!/(usr/bin/env )?python3'; then
+                printf '%s\n' "$file"
+              fi
+            done
+          )
+          if (( ${#python_files[@]} )); then
+            python -m py_compile "${python_files[@]}"
+            for file in "${python_files[@]}"; do
+              ruff check --stdin-filename "$file" < "$file"
+            done
+          fi
+
+      - name: Validate action schemas
+        run: |
+          find imageroot/actions -name 'validate-*.json' -print0 |
+            xargs -0 -n1 jq -e . >/dev/null

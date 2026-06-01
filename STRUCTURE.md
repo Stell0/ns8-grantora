@@ -1,41 +1,25 @@
 # STRUCTURE.md
 
-Compact map for agents working on an NS8 module.
+Current repository map for `ns8-grantora` during repository initialization.
 
 ## Root
 
-- `README.md`: install/configure/use/test documentation. Keep examples valid.
-- `build-images.sh`: builds module image and service images; owns NS8 image labels.
-- `imageroot/`: files copied into the installed module environment.
-- `ui/`: administrator UI source for cluster-admin.
-- `tests/`: Robot Framework module lifecycle tests.
-- `.github/`: CI/release workflows.
-- `.devcontainer/`: optional UI/dev tooling.
+- `README.md`: operator-facing status and milestone guidance.
+- `AGENTS.md`: NS8 working rules plus Grantora-specific exposure boundaries.
+- `PLAN.md`: milestone roadmap and target runtime topology.
+- `build-images.sh`: module image build and NS8 image labels.
+- `imageroot/`: NS8 module payload copied into the installed environment.
+- `tests/`: Robot lifecycle coverage for the current milestone.
+- `ui/`: cluster-admin module UI and metadata.
+- `.github/`: CI workflows for linting, image publication, and module tests.
 
 ## `imageroot/`
 
-- `actions/<action>/`: executable action steps and JSON schemas.
-- `events/<event>/`: executable event handlers.
-- `systemd/user/*.service`: Systemd user units for rootless services.
-- `bin/`: helper commands available in the agent environment.
-- `etc/state-include.conf`: backup includes for state and volumes.
-- `etc/state-exclude.conf`: backup excludes.
+- `actions/configure-module/`: placeholder configure action kept stable for Milestone 0.
+- `actions/get-configuration/`: returns current module configuration shape.
+- `actions/destroy-module/`: tears down Milestone 0 placeholder state.
+- `systemd/user/grantora.service`: temporary placeholder unit that will become the aggregate Grantora service in Milestone 1.
 
-## Required/typical actions
+## Target expansion
 
-- `configure-module`: validate input, persist config, render config, setup routes, start/reload units.
-- `get-configuration`: return current config for admin UI.
-- `get-status`: inherited from core unless extended.
-- `destroy-module`: cleanup routes/firewall/system state.
-- `restore-module`: extend after core restore when Redis keys or app-specific restore steps are needed.
-
-## State files
-
-- `state/environment`: non-secret agent env, managed by `agent.set_env()`.
-- `state/secrets.env`: preferred generic secret env file for new modules.
-- `state/*.env`: service-specific env files; document each one.
-- `state/<service config>`: generated runtime config used by containers.
-
-## Standard data flow
-
-`UI/API -> action stdin JSON -> validation -> agent env/secret files/config render -> systemd user unit -> Podman container -> Traefik/firewall/service discovery`
+Later milestones add the explicit Grantora pod topology under `imageroot/systemd/user/` and more actions such as `get-status`, `sync-users`, `backup-module`, and `restore-module`. The planned layout is tracked in [PLAN.md](PLAN.md).

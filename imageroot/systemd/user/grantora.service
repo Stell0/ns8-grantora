@@ -1,0 +1,16 @@
+#
+# Copyright (C) 2023 Nethesis S.r.l.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+
+[Unit]
+Description=Grantora placeholder service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/true
+ExecStop=/usr/bin/true
+RemainAfterExit=yes
+
+[Install]
+WantedBy=default.target

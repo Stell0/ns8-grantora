@@ -5,8 +5,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 
-# If the control reaches this step, the service can be enabled and started
+# If the control reaches this step, the placeholder service can be enabled.
 
-touch smarthost.env
-
-systemctl --user enable --now kickstart.service
+systemctl --user daemon-reload
+systemctl --user enable --now grantora.service

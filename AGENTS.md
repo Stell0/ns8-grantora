@@ -2,6 +2,15 @@
 
 This repository is an NS8 module. Follow official NS8 docs first, then local repo conventions, then inferred patterns from maintained NS8 modules.
 
+## Grantora boundaries
+
+- `ns8-grantora` packages upstream Grantora; it must not fork Grantora application logic.
+- Expose only the APISIX runtime surface publicly. Do not expose Grantora Admin API, APISIX Admin API, PostgreSQL, or etcd on public interfaces.
+- Admin actions must call Grantora from inside the pod; do not add a default host-mapped admin port.
+- Do not log or persist tokens, passwords, authorization headers, encrypted secret values, or decrypted secrets.
+- PostgreSQL is the source of truth and APISIX etcd is generated runtime state.
+- User-provider selection is NS8-owned. Discover domains through NS8 helpers and bind only the selected domain.
+
 ## Source order
 
 1. Local files: `README.md`, `build-images.sh`, `imageroot/`, `ui/`, `tests/`, `.github/`.
@@ -134,3 +143,8 @@ This repository is an NS8 module. Follow official NS8 docs first, then local rep
 - Preserve NS8 conventions over generic container-app habits.
 - When behavior is unclear, inspect upstream docs/code and record the assumption in the change summary.
 - Never invent NS8 standards. Mark unsupported or unclear rules as gaps.
+
+## Testing and validation
+- Use `build-images.sh` to build and test locally.
+- Use ssh to makako.sf.nethserver.net for testing in a real NS8 environment.
+- After each milestone, run the test on the staging cluster

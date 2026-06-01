@@ -1,100 +1,58 @@
-# ns8-kickstart
+# ns8-grantora
 
-This is a template module for [NethServer 8](https://github.com/NethServer/ns8-core).
-To start a new module from it:
+`ns8-grantora` packages the Grantora Agent Capability Gateway for NethServer 8 without forking upstream Grantora application logic.
 
-1. Click on [Use this template](https://github.com/NethServer/ns8-kickstart/generate).
-   Name your repo with `ns8-` prefix (e.g. `ns8-mymodule`). 
-   Do not end your module name with a number, like ~~`ns8-baaad2`~~!
+Milestone 0 initializes the repository identity and CI surfaces. It does not yet ship the production Grantora pod topology described in [PLAN.md](PLAN.md).
 
-1. Clone the repository, enter the cloned directory and
-   [configure your GIT identity](https://git-scm.com/book/en/v2/Getting-Started-First-Time-Git-Setup#_your_identity)
+## Current scope
 
-1. Rename some references inside the repo:
-   ```
-   modulename=$(basename $(pwd) | sed 's/^ns8-//')
-   git mv imageroot/systemd/user/kickstart.service imageroot/systemd/user/${modulename}.service
-   git mv tests/kickstart.robot tests/${modulename}.robot
-   sed -i "s/kickstart/${modulename}/g" $(find .github/ .devcontainer/ * -type f)
-   git commit -a -m "Repository initialization"
-   ```
-
-1. Edit this `README.md` file, by replacing this section with your module
-   description
-
-1. Adjust `.github/workflows` to your needs. `clean-registry.yml` might
-   need the proper list of image names to work correctly. Unused workflows
-   can be disabled from the GitHub Actions interface.
-
-1. Commit and push your local changes
+- Repository identity is `ns8-grantora` across docs, tests, UI metadata, and image build output.
+- The module image reserves one TCP port for the future APISIX runtime route.
+- NS8 authorizations are prepared for Traefik route management and account-domain consumption.
+- Template `smarthost` and fake echo-server scaffolding have been removed.
+- CI validates markdown, shell scripts, Python action helpers, and action schema JSON.
 
 ## Install
 
-Instantiate the module with:
+Build the module image locally:
 
-    add-module ghcr.io/nethserver/kickstart:latest 1
+```bash
+./build-images.sh
+```
 
-The output of the command will return the instance name.
-Output example:
+Then instantiate the module with the image you published, for example:
 
-    {"module_id": "kickstart1", "image_name": "kickstart", "image_url": "ghcr.io/nethserver/kickstart:latest"}
+```bash
+add-module ghcr.io/nethserver/grantora:latest 1
+```
+
+The command returns the instance name, for example:
+
+```json
+{"module_id": "grantora1", "image_name": "grantora", "image_url": "ghcr.io/nethserver/grantora:latest"}
+```
 
 ## Configure
 
-Let's assume that the kickstart instance is named `kickstart1`.
+At this milestone `configure-module` is intentionally a no-op placeholder while the runtime packaging work lands in Milestone 1 and Milestone 2.
 
-Launch `configure-module`, by setting the following parameters:
-- `<MODULE_PARAM1_NAME>`: <MODULE_PARAM1_DESCRIPTION>
-- `<MODULE_PARAM2_NAME>`: <MODULE_PARAM2_DESCRIPTION>
-- ...
+```bash
+api-cli run module/grantora1/configure-module --data '{}'
+```
 
-Example:
+The action succeeds so the repository can be exercised in NS8, but it does not yet start the Grantora runtime stack or publish a route.
 
-    api-cli run module/kickstart1/configure-module --data '{}'
+## Roadmap
 
-The above command will:
-- start and configure the kickstart instance
-- (describe configuration process)
-- ...
+- Podman pod packaging for Grantora, PostgreSQL, APISIX, and etcd begins in [PLAN.md](PLAN.md).
+- Public runtime routing, status reporting, user-domain binding, and backup/restore are tracked there as later milestones.
 
-Send a test HTTP request to the kickstart backend service:
+## Tests
 
-    curl http://127.0.0.1/kickstart/
-
-## Smarthost setting discovery
-
-Some configuration settings, like the smarthost setup, are not part of the
-`configure-module` action input: they are discovered by looking at some
-Redis keys.  To ensure the module is always up-to-date with the
-centralized [smarthost
-setup](https://nethserver.github.io/ns8-core/core/smarthost/) every time
-kickstart starts, the command `bin/discover-smarthost` runs and refreshes
-the `state/smarthost.env` file with fresh values from Redis.
-
-Furthermore if smarthost setup is changed when kickstart is already
-running, the event handler `events/smarthost-changed/10reload_services`
-restarts the main module service.
-
-See also the `systemd/user/kickstart.service` file.
-
-This setting discovery is just an example to understand how the module is
-expected to work: it can be rewritten or discarded completely.
+This repository uses the NS8 testing infrastructure. For local execution guidance, refer to the [ns8-github-actions test README](https://github.com/NethServer/ns8-github-actions/blob/v1/README.md#running-tests-locally).
 
 ## Uninstall
 
-To uninstall the instance:
-
-    remove-module --no-preserve kickstart1
-
-## Running tests locally
-
-This module uses the NS8 standard testing infrastructure. For instructions on how to run the test suite locally, refer to the [Running tests locally](https://github.com/NethServer/ns8-github-actions/blob/v1/README.md#running-tests-locally) section of the ns8-github-actions README.
-
-## UI translation
-
-Translated with [Weblate](https://hosted.weblate.org/projects/ns8/).
-
-To setup the translation process:
-
-- add [GitHub Weblate app](https://docs.weblate.org/en/latest/admin/continuous.html#github-setup) to your repository
-- add your repository to [hosted.weblate.org]((https://hosted.weblate.org) or ask a NethServer developer to add it to ns8 Weblate project
+```bash
+remove-module --no-preserve grantora1
+```

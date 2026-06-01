@@ -13,22 +13,22 @@ images=()
 # The image will be pushed to GitHub container registry
 repobase="${REPOBASE:-ghcr.io/nethserver}"
 # Configure the image name
-reponame="kickstart"
+reponame="grantora"
 
 # Create a new empty container image
 container=$(buildah from scratch)
 
-# Reuse existing nodebuilder-kickstart container, to speed up builds
-if ! buildah containers --format "{{.ContainerName}}" | grep -q nodebuilder-kickstart; then
+# Reuse existing nodebuilder-grantora container, to speed up builds
+if ! buildah containers --format "{{.ContainerName}}" | grep -q nodebuilder-grantora; then
     echo "Pulling NodeJS runtime..."
-    buildah from --name nodebuilder-kickstart -v "${PWD}:/usr/src:Z" docker.io/library/node:24.15.0-slim
+    buildah from --name nodebuilder-grantora -v "${PWD}:/usr/src:Z" docker.io/library/node:24.15.0-slim
 fi
 
 echo "Build static UI files with node..."
 buildah run \
     --workingdir=/usr/src/ui \
     --env="NODE_OPTIONS=--openssl-legacy-provider" \
-    nodebuilder-kickstart \
+    nodebuilder-grantora \
     sh -c "yarn install && yarn build"
 
 # Add imageroot directory to the container image
@@ -36,10 +36,11 @@ buildah add "${container}" imageroot /imageroot
 buildah add "${container}" ui/dist /ui
 # Setup the entrypoint, ask to reserve one TCP port with the label and set a rootless container
 buildah config --entrypoint=/ \
-    --label="org.nethserver.authorizations=traefik@node:routeadm" \
+    --label="org.nethserver.authorizations=cluster:accountconsumer,traefik@node:routeadm" \
     --label="org.nethserver.tcp-ports-demand=1" \
     --label="org.nethserver.rootfull=0" \
-    --label="org.nethserver.images=docker.io/jmalloc/echo-server:latest" \
+    --label="org.opencontainers.image.title=ns8-grantora" \
+    --label="org.opencontainers.image.description=Grantora Agent Capability Gateway module for NethServer 8" \
     "${container}"
 # Commit the image
 buildah commit "${container}" "${repobase}/${reponame}"

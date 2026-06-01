@@ -328,23 +328,23 @@ Objective: replace kickstart identity with `ns8-grantora` identity and make the 
 
 Tasks:
 
-- [ ] Replace kickstart README with Grantora module README.
-- [ ] Add `AGENTS.md` with NS8 module rules and Grantora-specific boundaries.
-- [ ] Keep `STRUCTURE.md` aligned with the actual module layout.
-- [ ] Keep this `PLAN.md` aligned with upstream Grantora runtime structure.
-- [ ] Rename kickstart systemd units, tests and workflow references to `grantora`.
-- [ ] Set correct image labels in `build-images.sh`:
-  - [ ] module name and description;
-  - [ ] required TCP port demand: `1` for APISIX runtime route;
-  - [ ] `org.nethserver.authorizations=cluster:accountconsumer`.
-- [ ] Remove unused smarthost example logic from kickstart unless it is explicitly needed later.
-- [ ] Add shell/Python lint configuration for action scripts.
+- [x] Replace kickstart README with Grantora module README.
+- [x] Add `AGENTS.md` with NS8 module rules and Grantora-specific boundaries.
+- [x] Keep `STRUCTURE.md` aligned with the actual module layout.
+- [x] Keep this `PLAN.md` aligned with upstream Grantora runtime structure.
+- [x] Rename kickstart systemd units, tests and workflow references to `grantora`.
+- [x] Set correct image labels in `build-images.sh`:
+  - [x] module name and description;
+  - [x] required TCP port demand: `1` for APISIX runtime route;
+  - [x] `org.nethserver.authorizations=cluster:accountconsumer`.
+- [x] Remove unused smarthost example logic from kickstart unless it is explicitly needed later.
+- [x] Add shell/Python lint configuration for action scripts.
 
 Acceptance:
 
-- [ ] Repository no longer exposes kickstart names in user-facing files.
-- [ ] `build-images.sh` builds a module image named for `ns8-grantora`.
-- [ ] CI validates markdown, shell scripts and action schemas.
+- [x] Repository no longer exposes kickstart names in user-facing files.
+- [x] `build-images.sh` builds a module image named for `ns8-grantora`.
+- [x] CI validates markdown, shell scripts and action schemas.
 
 Upstream Grantora work:
 
