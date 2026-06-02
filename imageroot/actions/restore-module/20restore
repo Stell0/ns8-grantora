@@ -1,0 +1,192 @@
+#!/usr/bin/env python3
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+BIN_DIR = Path(__file__).resolve().parents[2] / "bin"
+ENV_HELPER = BIN_DIR / "grantora-env"
+PG_RESTORE_HELPER = BIN_DIR / "grantora-pg-restore"
+ADMIN_HELPER = BIN_DIR / "grantora-admin"
+SMOKE_HELPER = BIN_DIR / "grantora-smoke"
+USERS_HELPER = BIN_DIR / "grantora-users"
+STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", Path.home() / ".local/state")) / "state"
+
+
+class RestoreError(RuntimeError):
+    pass
+
+
+def run(
+    args: list[str | Path],
+    *,
+    timeout: int = 120,
+    check: bool = True,
+    ignore_failure: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(
+        [str(arg) for arg in args],
+        text=True,
+        capture_output=True,
+        timeout=timeout,
+        check=False,
+    )
+    if check and result.returncode != 0 and not ignore_failure:
+        detail = result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
+        raise RestoreError(f"command failed: {Path(str(args[0])).name}: {detail}")
+    return result
+
+
+def stop_runtime() -> None:
+    run(
+        [
+            "systemctl",
+            "--user",
+            "stop",
+            "grantora.service",
+            "grantora-apisix.service",
+            "grantora-api.service",
+            "grantora-apisix-etcd.service",
+            "grantora-postgres.service",
+            "grantora-pod.service",
+        ],
+        timeout=120,
+        check=False,
+        ignore_failure=True,
+    )
+
+
+def start_unit(unit: str) -> None:
+    run(["systemctl", "--user", "start", unit], timeout=180)
+
+
+def restore_route() -> bool:
+    route_file = STATE_DIR / "route.json"
+    if not route_file.exists():
+        return False
+    try:
+        import agent
+    except ImportError:
+        return False
+    route = json.loads(route_file.read_text(encoding="utf-8"))
+    agent.set_route(route)
+    return True
+
+
+def bind_user_domain() -> dict[str, object]:
+    result = run([USERS_HELPER, "bind"], timeout=60, check=False)
+    if result.returncode != 0:
+        return {"bound": False, "error": result.stderr.strip() or "bind_failed"}
+    try:
+        return json.loads(result.stdout or "{}")
+    except json.JSONDecodeError:
+        return {"bound": False, "error": "invalid_bind_output"}
+
+
+def wait_command(args: list[str], label: str, attempts: int = 60, interval: float = 2.0) -> None:
+    last_error = ""
+    for _attempt in range(attempts):
+        result = run(args, timeout=15, check=False)
+        if result.returncode == 0:
+            return
+        last_error = result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
+        time.sleep(interval)
+    raise RestoreError(f"timed out waiting for {label}: {last_error}")
+
+
+def wait_postgres() -> None:
+    wait_command(
+        ["podman", "exec", "grantora-postgres", "pg_isready", "-U", "grantora", "-d", "grantora"],
+        "postgres",
+    )
+
+
+def wait_api_ready() -> None:
+    script = r'''
+import urllib.request
+
+urllib.request.urlopen("http://127.0.0.1:8080/readyz", timeout=5).read()
+'''
+    wait_command(["podman", "exec", "grantora-api", "python", "-c", script], "grantora-api readiness")
+
+
+def wait_apisix() -> None:
+    wait_command(
+        ["podman", "exec", "grantora-apisix", "sh", "-ec", "apisix status >/dev/null"],
+        "apisix",
+    )
+
+
+def restore_database() -> dict[str, object]:
+    result = run([PG_RESTORE_HELPER], timeout=900)
+    try:
+        return json.loads(result.stdout or "{}")
+    except json.JSONDecodeError as exc:
+        raise RestoreError("invalid restore helper output") from exc
+
+
+def sync_apisix() -> dict[str, object]:
+    result = run([ADMIN_HELPER, "POST", "/v1/admin/apisix/sync"], timeout=60)
+    try:
+        return json.loads(result.stdout or "{}")
+    except json.JSONDecodeError:
+        return {"ok": True}
+
+
+def run_smoke() -> dict[str, object]:
+    result = run([SMOKE_HELPER], timeout=120)
+    try:
+        return json.loads(result.stdout or "{}")
+    except json.JSONDecodeError as exc:
+        raise RestoreError("invalid smoke helper output") from exc
+
+
+def main() -> None:
+    try:
+        stop_runtime()
+        run([ENV_HELPER, "render"], timeout=60)
+        shutil.rmtree(STATE_DIR / "apisix-etcd-data", ignore_errors=True)
+        (STATE_DIR / "apisix-etcd-data").mkdir(parents=True, exist_ok=True)
+
+        run(["systemctl", "--user", "daemon-reload"], timeout=60)
+        run(["systemctl", "--user", "enable", "grantora.service"], timeout=60)
+
+        route_restored = restore_route()
+        user_domain = bind_user_domain()
+
+        start_unit("grantora-pod.service")
+        start_unit("grantora-postgres.service")
+        wait_postgres()
+        restored = restore_database()
+        start_unit("grantora-apisix-etcd.service")
+        start_unit("grantora-api.service")
+        wait_api_ready()
+        start_unit("grantora-apisix.service")
+        wait_apisix()
+        sync = sync_apisix()
+        smoke = run_smoke()
+        start_unit("grantora.service")
+        json.dump(
+            {
+                "ok": True,
+                "restored_dump_file": restored.get("restored_dump_file", ""),
+                "size_bytes": restored.get("size_bytes", 0),
+                "route_restored": route_restored,
+                "user_domain": user_domain,
+                "apisix_sync": sync,
+                "smoke": smoke,
+            },
+            sys.stdout,
+        )
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

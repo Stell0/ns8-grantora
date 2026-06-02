@@ -181,6 +181,9 @@ imageroot/
     grantora-pg-dump
     grantora-pg-restore
     grantora-pod-exec
+    grantora-smoke
+    module-dump-state
+    module-cleanup-state
   etc/
     state-include.conf
     state-exclude.conf
@@ -596,33 +599,33 @@ Objective: implement reliable NS8 backup/restore for Grantora state.
 
 Tasks:
 
-- [ ] Add `state-include.conf` for:
-  - [ ] generated env files;
-  - [ ] `secrets.env`;
-  - [ ] PostgreSQL dumps or volume data as appropriate;
-  - [ ] `bootstrap.json`;
-  - [ ] user-domain sync state.
-- [ ] Add `state-exclude.conf` for:
-  - [ ] transient logs;
-  - [ ] temporary dumps;
-  - [ ] APISIX generated/cache state if it is recreated by reconciliation.
-- [ ] Implement `backup-module`:
-  - [ ] stop or quiesce writes if required;
-  - [ ] run `pg_dump --format=custom` through `podman exec grantora-postgres`;
-  - [ ] include environment-managed keys and peppers;
-  - [ ] avoid logging passwords.
-- [ ] Implement `restore-module`:
-  - [ ] restore secrets/env first;
-  - [ ] start `grantora-pod.service`;
-  - [ ] start `grantora-postgres.service`;
-  - [ ] restore custom dump through `podman exec grantora-postgres`;
-  - [ ] start `grantora-apisix-etcd.service`;
-  - [ ] start `grantora-api.service`;
-  - [ ] wait for readiness through `grantora-admin`/pod-local call;
-  - [ ] start `grantora-apisix.service`;
-  - [ ] run APISIX sync;
-  - [ ] run smoke checks.
-- [ ] Implement `run-smoke` action covering direct pod-local health, readiness, APISIX sync and one runtime discovery call when a test agent exists.
+- [x] Add `state-include.conf` for:
+  - [x] generated env files;
+  - [x] `secrets.env`;
+  - [x] PostgreSQL dumps or volume data as appropriate;
+  - [x] `bootstrap.json`;
+  - [x] user-domain sync state.
+- [x] Add `state-exclude.conf` for:
+  - [x] transient logs;
+  - [x] temporary dumps;
+  - [x] APISIX generated/cache state if it is recreated by reconciliation.
+- [x] Implement `backup-module`:
+  - [x] stop or quiesce writes if required;
+  - [x] run `pg_dump --format=custom` through `podman exec grantora-postgres`;
+  - [x] include environment-managed keys and peppers;
+  - [x] avoid logging passwords.
+- [x] Implement `restore-module`:
+  - [x] restore secrets/env first;
+  - [x] start `grantora-pod.service`;
+  - [x] start `grantora-postgres.service`;
+  - [x] restore custom dump through `podman exec grantora-postgres`;
+  - [x] start `grantora-apisix-etcd.service`;
+  - [x] start `grantora-api.service`;
+  - [x] wait for readiness through `grantora-admin`/pod-local call;
+  - [x] start `grantora-apisix.service`;
+  - [x] run APISIX sync;
+  - [x] run smoke checks.
+- [x] Implement `run-smoke` action covering direct pod-local health, readiness, APISIX sync and one runtime discovery call when a test agent exists.
 
 Acceptance:
 

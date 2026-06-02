@@ -1,0 +1,40 @@
+#!/bin/bash
+
+set -euo pipefail
+
+state_dir="${STATE_DIRECTORY:-${HOME}/.local/state}/state"
+backup_dir="${state_dir}/backups"
+dump_file="${1:-${backup_dir}/grantora-postgres.dump}"
+
+mkdir -p "$(dirname -- "${dump_file}")"
+
+if ! podman container exists grantora-postgres; then
+	echo "grantora-postgres container is not available" >&2
+	exit 1
+fi
+
+tmp_file="${dump_file}.tmp"
+rm -f -- "${tmp_file}"
+
+podman exec grantora-postgres pg_dump \
+	--username=grantora \
+	--dbname=grantora \
+	--format=custom \
+	--no-owner \
+	--no-acl \
+	--file=/tmp/grantora-postgres.dump
+
+podman cp grantora-postgres:/tmp/grantora-postgres.dump "${tmp_file}"
+podman exec grantora-postgres rm -f /tmp/grantora-postgres.dump >/dev/null
+mv -f -- "${tmp_file}" "${dump_file}"
+chmod 0600 "${dump_file}"
+
+python3 - "${dump_file}" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+print(json.dumps({"dump_file": str(path), "size_bytes": path.stat().st_size}))
+PY

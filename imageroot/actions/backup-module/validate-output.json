@@ -1,0 +1,12 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "backup-module output",
+    "$id": "http://schema.nethserver.org/grantora/backup-module-output.json",
+    "description": "Grantora PostgreSQL logical backup summary",
+    "type": "object",
+    "required": ["dump_file", "size_bytes"],
+    "properties": {
+        "dump_file": {"type": "string"},
+        "size_bytes": {"type": "integer", "minimum": 0}
+    }
+}

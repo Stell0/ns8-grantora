@@ -1,0 +1,6 @@
+#!/bin/bash
+
+set -euo pipefail
+
+state_dir="${STATE_DIRECTORY:-${HOME}/.local/state}/state"
+rm -f -- "${state_dir}/backups/grantora-postgres.dump" "${state_dir}/backups/grantora-postgres.dump.tmp"

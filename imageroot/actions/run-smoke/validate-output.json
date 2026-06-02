@@ -1,0 +1,12 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "run-smoke output",
+    "$id": "http://schema.nethserver.org/grantora/run-smoke-output.json",
+    "description": "Grantora pod-local smoke check results",
+    "type": "object",
+    "required": ["ok", "checks"],
+    "properties": {
+        "ok": {"type": "boolean"},
+        "checks": {"type": "object"}
+    }
+}

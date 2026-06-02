@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+
+BIN_DIR = Path(__file__).resolve().parent
+ADMIN_HELPER = BIN_DIR / "grantora-admin"
+STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", Path.home() / ".local/state")) / "state"
+
+
+def command(args: list[str], timeout: int = 15) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(args, text=True, capture_output=True, timeout=timeout, check=False)
+    except FileNotFoundError as exc:
+        return subprocess.CompletedProcess(args, 127, "", str(exc))
+    except subprocess.TimeoutExpired as exc:
+        return subprocess.CompletedProcess(args, 124, exc.stdout or "", exc.stderr or "timeout")
+
+
+def api_get(path: str) -> dict[str, object]:
+    script = f'''
+import json
+import sys
+import urllib.error
+import urllib.request
+
+try:
+    with urllib.request.urlopen("http://127.0.0.1:8080{path}", timeout=5) as response:
+        payload = response.read().decode("utf-8")
+        try:
+            body = json.loads(payload)
+        except json.JSONDecodeError:
+            body = payload
+        json.dump({{"ok": True, "status_code": response.status, "body": body}}, sys.stdout)
+except Exception as exc:
+    json.dump({{"ok": False, "error": str(exc)}}, sys.stdout)
+'''
+    result = command(["podman", "exec", "grantora-api", "python", "-c", script])
+    if result.returncode == 0 and result.stdout:
+        return json.loads(result.stdout)
+    return {"ok": False, "error": result.stderr.strip() or "not_available"}
+
+
+def admin_call(method: str, path: str) -> dict[str, object]:
+    result = command([str(ADMIN_HELPER), method, path], timeout=30)
+    if result.returncode != 0:
+        return {"ok": False, "error": result.stderr.strip() or result.stdout.strip() or "not_available"}
+    try:
+        body = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError:
+        body = result.stdout
+    return {"ok": True, "body": body}
+
+
+def runtime_probe(path: str) -> dict[str, object]:
+    result = command(
+        [
+            "podman",
+            "exec",
+            "grantora-apisix",
+            "sh",
+            "-ec",
+            f"curl -sS -o /dev/null -w '%{{http_code}}' --max-time 5 http://127.0.0.1:9080{path}",
+        ]
+    )
+    if result.returncode != 0:
+        return {"ok": False, "error": result.stderr.strip() or "not_available"}
+    try:
+        status_code = int(result.stdout.strip())
+    except ValueError:
+        return {"ok": False, "error": "invalid_status_code"}
+    return {"ok": status_code in {200, 401, 403}, "status_code": status_code}
+
+
+def optional_runtime_discovery() -> dict[str, object]:
+    token_files = sorted((STATE_DIR / "agent-tokens").glob("*.env"))
+    if not token_files:
+        return {"ok": True, "skipped": True, "reason": "no_stored_test_agent_token"}
+    env_values = parse_envfile(token_files[0])
+    token = env_values.get("GRANTORA_AGENT_TOKEN")
+    if not token:
+        return {"ok": True, "skipped": True, "reason": "stored_token_missing"}
+    result = subprocess.run(
+        [
+            "podman",
+            "exec",
+            "-i",
+            "grantora-apisix",
+            "sh",
+            "-ec",
+            "read -r token; curl -sS -o /dev/null -w '%{http_code}' --max-time 5 -H \"Authorization: Bearer ${token}\" http://127.0.0.1:9080/v1/mcp/tools",
+        ],
+        input=f"{token}\n",
+        text=True,
+        capture_output=True,
+        timeout=15,
+        check=False,
+    )
+    if result.returncode == 0 and result.stdout:
+        try:
+            status_code = int(result.stdout.strip())
+        except ValueError:
+            return {"ok": False, "error": "invalid_status_code"}
+        return {"ok": status_code == 200, "status_code": status_code}
+    return {"ok": False, "error": result.stderr.strip() or "runtime_discovery_failed"}
+
+
+def parse_envfile(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not path.exists():
+        return values
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key] = value
+    return values
+
+
+def main() -> None:
+    checks = {
+        "healthz": api_get("/healthz"),
+        "readyz": api_get("/readyz"),
+        "apisix_sync": admin_call("POST", "/v1/admin/apisix/sync"),
+        "apisix_status": admin_call("GET", "/v1/admin/apisix/status"),
+        "runtime_discovery": optional_runtime_discovery(),
+        "runtime_route_probe": runtime_probe("/v1/me"),
+    }
+    ok = all(check.get("ok") for check in checks.values())
+    json.dump({"ok": ok, "checks": checks}, sys.stdout)
+    if not ok:
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
