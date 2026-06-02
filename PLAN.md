@@ -537,46 +537,46 @@ Objective: provide a minimal NS8 UI for installing and operating Grantora safely
 
 Views:
 
-- [ ] Configuration:
-  - [ ] public hostname;
-  - [ ] selected user provider;
-  - [ ] image tag/version;
-  - [ ] metrics flag;
-  - [ ] retention windows;
-  - [ ] rate limits;
-  - [ ] upstream TLS/timeout defaults.
-- [ ] Status:
-  - [ ] pod status;
-  - [ ] individual helper container statuses;
-  - [ ] health/readiness;
-  - [ ] APISIX sync status;
-  - [ ] public runtime URL;
-  - [ ] last user sync;
-  - [ ] running version.
-- [ ] Workspace bootstrap:
-  - [ ] create/reuse workspace;
-  - [ ] sync users;
-  - [ ] list templates.
-- [ ] Agents:
-  - [ ] list agents;
-  - [ ] create agent;
-  - [ ] rotate token;
-  - [ ] disable agent.
-- [ ] Applications/capabilities:
-  - [ ] create application instance;
-  - [ ] create capability from template;
-  - [ ] create binding;
-  - [ ] create/rotate secret.
-- [ ] Audit/usage basic viewer:
-  - [ ] last N audit events;
-  - [ ] usage summary by agent/user/capability.
+- [x] Configuration:
+  - [x] public hostname;
+  - [x] selected user provider;
+  - [x] image tag/version;
+  - [x] metrics flag;
+  - [x] retention windows;
+  - [x] rate limits;
+  - [x] upstream TLS/timeout defaults.
+- [x] Status:
+  - [x] pod status;
+  - [x] individual helper container statuses;
+  - [x] health/readiness;
+  - [x] APISIX sync status;
+  - [x] public runtime URL;
+  - [x] last user sync;
+  - [x] running version.
+- [x] Workspace bootstrap:
+  - [x] create/reuse workspace;
+  - [x] sync users;
+  - [x] list templates.
+- [x] Agents:
+  - [x] list agents;
+  - [x] create agent;
+  - [x] rotate token;
+  - [x] disable agent.
+- [x] Applications/capabilities:
+  - [x] create application instance;
+  - [x] create capability from template;
+  - [x] create binding;
+  - [x] create/rotate secret.
+- [x] Audit/usage basic viewer:
+  - [x] last N audit events;
+  - [x] usage summary by agent/user/capability.
 
 Rules:
 
-- [ ] UI calls NS8 actions only.
-- [ ] UI never stores or logs tokens except showing one-time generated tokens returned by an explicit action.
-- [ ] UI validates host and domain before calling configure.
-- [ ] UI clearly distinguishes public runtime URL from private operator surfaces.
+- [x] UI calls NS8 actions only.
+- [x] UI never stores or logs tokens except showing one-time generated tokens returned by an explicit action.
+- [x] UI validates host and domain before calling configure.
+- [x] UI clearly distinguishes public runtime URL from private operator surfaces.
 
 Acceptance:
 

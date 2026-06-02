@@ -162,6 +162,18 @@ def list_collection(
         offset += limit
 
 
+def get_collection_page(
+    path: str,
+    collection_key: str,
+    params: dict[str, object | None] | None = None,
+) -> dict[str, object]:
+    response = admin_api("GET", f"{path}?{query_string(dict(params or {}))}")
+    page = response.get(collection_key, [])
+    if not isinstance(page, list):
+        raise BootstrapError(f"{path} returned invalid {collection_key}")
+    return response
+
+
 def find_by(items: list[dict[str, object]], field: str, value: object) -> dict[str, object] | None:
     return next((item for item in items if item.get(field) == value), None)
 
@@ -634,6 +646,20 @@ def rotate_agent_token(payload: dict[str, object]) -> dict[str, object]:
     }
 
 
+def disable_agent(payload: dict[str, object]) -> dict[str, object]:
+    state = load_state()
+    agent_id = required_str(payload, "agent_id")
+    response = admin_api("PATCH", f"/v1/admin/agents/{agent_id}", {"status": "disabled"})
+    agent = response["agent"]
+    if isinstance(agent, dict) and agent.get("slug"):
+        state_map(state, "agents")[str(agent["slug"])] = resource_ref(
+            agent,
+            ("id", "workspace_id", "slug", "display_name", "status"),
+        )
+    write_state(state)
+    return {"action": "disabled", "agent": agent}
+
+
 def create_binding(payload: dict[str, object]) -> dict[str, object]:
     state = load_state()
     workspace_id = resolve_workspace_id(payload, state)
@@ -673,6 +699,83 @@ def create_binding(payload: dict[str, object]) -> dict[str, object]:
     )
     write_state(state)
     return {"action": action, "binding": binding}
+
+
+def admin_overview(payload: dict[str, object]) -> dict[str, object]:
+    state = load_state()
+    requested_workspace_id = payload.get("workspace_id") or state.get("workspace_id")
+    workspace_id = str(requested_workspace_id) if requested_workspace_id else None
+    limit = bounded_int(payload.get("limit", 100), "limit", 1, 500)
+    events_limit = bounded_int(payload.get("events_limit", 25), "events_limit", 1, 100)
+    provider_type = payload.get("provider_type")
+    workspace_filter = {"workspace_id": workspace_id} if workspace_id else {}
+    include_disabled = {"include_disabled": True}
+    workspaces = list_collection(
+        "/v1/admin/workspaces",
+        "workspaces",
+        {"include_disabled": True},
+    )
+    resources = {
+        "workspaces": workspaces,
+        "applications": list_collection(
+            "/v1/admin/applications",
+            "applications",
+            workspace_filter | include_disabled,
+        ),
+        "users": list_collection(
+            "/v1/admin/users",
+            "users",
+            workspace_filter | include_disabled,
+        ),
+        "roles": list_collection(
+            "/v1/admin/roles",
+            "roles",
+            workspace_filter | include_disabled,
+        ),
+        "capabilities": list_collection(
+            "/v1/admin/capabilities",
+            "capabilities",
+            workspace_filter | include_disabled,
+        ),
+        "agents": list_collection(
+            "/v1/admin/agents",
+            "agents",
+            workspace_filter | include_disabled,
+        ),
+        "bindings": list_collection(
+            "/v1/admin/bindings",
+            "bindings",
+            workspace_filter | include_disabled,
+        ),
+        "secrets": list_collection(
+            "/v1/admin/secrets",
+            "secrets",
+            workspace_filter | {"include_revoked": True},
+        ),
+        "capability_templates": list_collection(
+            "/v1/admin/capability-templates",
+            "templates",
+            {"provider_type": provider_type} if provider_type else {},
+        ),
+    }
+    audit_response = get_collection_page(
+        "/v1/admin/audit",
+        "audit",
+        workspace_filter | {"limit": events_limit, "offset": 0},
+    )
+    usage_response = get_collection_page(
+        "/v1/admin/usage",
+        "usage",
+        workspace_filter | {"limit": events_limit, "offset": 0},
+    )
+    return {
+        "workspace_id": workspace_id or "",
+        "bootstrap": status(),
+        "resources": {key: value[:limit] for key, value in resources.items()},
+        "audit": audit_response.get("audit", []),
+        "usage": usage_response.get("usage", []),
+        "usage_summaries": usage_response.get("summaries", []),
+    }
 
 
 def status() -> dict[str, object]:
@@ -746,6 +849,16 @@ def required_str(payload: dict[str, object], key: str) -> str:
     return str(value)
 
 
+def bounded_int(value: object, key: str, minimum: int, maximum: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise BootstrapError(f"{key} must be an integer") from exc
+    if parsed < minimum or parsed > maximum:
+        raise BootstrapError(f"{key} must be between {minimum} and {maximum}")
+    return parsed
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Grantora bootstrap and admin helper actions")
     parser.add_argument(
@@ -761,7 +874,9 @@ def main() -> None:
             "rotate-secret",
             "create-agent",
             "rotate-agent-token",
+            "disable-agent",
             "create-binding",
+            "get-admin-overview",
             "status",
         ],
     )
@@ -781,7 +896,9 @@ def main() -> None:
             "rotate-secret": rotate_secret,
             "create-agent": create_agent,
             "rotate-agent-token": rotate_agent_token,
+            "disable-agent": disable_agent,
             "create-binding": create_binding,
+            "get-admin-overview": admin_overview,
             "status": lambda _data: status(),
         }
         json.dump(handlers[args.command](payload), sys.stdout)

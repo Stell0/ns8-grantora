@@ -29,6 +29,34 @@
         <span>{{ $t("settings.title") }}</span>
       </cv-side-nav-link>
       <cv-side-nav-link
+        @click="goToAppPage(instanceName, 'workspace')"
+        :class="{ 'current-page': isLinkActive('workspace') }"
+      >
+        <template v-slot:nav-icon><DataTable20 /></template>
+        <span>{{ $t("workspace.title") }}</span>
+      </cv-side-nav-link>
+      <cv-side-nav-link
+        @click="goToAppPage(instanceName, 'agents')"
+        :class="{ 'current-page': isLinkActive('agents') }"
+      >
+        <template v-slot:nav-icon><User20 /></template>
+        <span>{{ $t("agents.title") }}</span>
+      </cv-side-nav-link>
+      <cv-side-nav-link
+        @click="goToAppPage(instanceName, 'resources')"
+        :class="{ 'current-page': isLinkActive('resources') }"
+      >
+        <template v-slot:nav-icon><Application20 /></template>
+        <span>{{ $t("resources.title") }}</span>
+      </cv-side-nav-link>
+      <cv-side-nav-link
+        @click="goToAppPage(instanceName, 'activity')"
+        :class="{ 'current-page': isLinkActive('activity') }"
+      >
+        <template v-slot:nav-icon><Events20 /></template>
+        <span>{{ $t("activity.title") }}</span>
+      </cv-side-nav-link>
+      <cv-side-nav-link
         @click="goToAppPage(instanceName, 'about')"
         :class="{ 'current-page': isLinkActive('about') }"
       >
@@ -43,6 +71,10 @@
 import Settings20 from "@carbon/icons-vue/es/settings/20";
 import Information20 from "@carbon/icons-vue/es/information/20";
 import Activity20 from "@carbon/icons-vue/es/activity/20";
+import DataTable20 from "@carbon/icons-vue/es/data-table/20";
+import User20 from "@carbon/icons-vue/es/user/20";
+import Application20 from "@carbon/icons-vue/es/application/20";
+import Events20 from "@carbon/icons-vue/es/events/20";
 import { mapState } from "vuex";
 import { QueryParamService, UtilService } from "@nethserver/ns8-ui-lib";
 
@@ -52,6 +84,10 @@ export default {
     Settings20,
     Information20,
     Activity20,
+    DataTable20,
+    User20,
+    Application20,
+    Events20,
   },
   mixins: [QueryParamService, UtilService],
   data() {

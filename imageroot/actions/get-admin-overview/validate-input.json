@@ -1,0 +1,13 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "get-admin-overview input",
+    "$id": "http://schema.nethserver.org/grantora/get-admin-overview-input.json",
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "workspace_id": {"type": "string", "minLength": 1},
+        "provider_type": {"type": "string", "minLength": 1, "maxLength": 63},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+        "events_limit": {"type": "integer", "minimum": 1, "maximum": 100}
+    }
+}
