@@ -498,25 +498,25 @@ Objective: provide actions that create the first usable Grantora workspace and c
 
 Tasks:
 
-- [ ] Implement `grantora-admin` helper that executes Admin API calls inside the pod.
-- [ ] Implement `grantora-pod-exec` helper for safe health/status/API calls.
-- [ ] Implement `bootstrap-workspace` action.
-- [ ] Create or reuse a default workspace for the module instance.
-- [ ] Seed default runtime permissions by calling `GET /v1/admin/permissions` or equivalent upstream behavior.
+- [x] Implement `grantora-admin` helper that executes Admin API calls inside the pod.
+- [x] Implement `grantora-pod-exec` helper for safe health/status/API calls.
+- [x] Implement `bootstrap-workspace` action.
+- [x] Create or reuse a default workspace for the module instance.
+- [x] Seed default runtime permissions by calling `GET /v1/admin/permissions` or equivalent upstream behavior.
 - [ ] Create default roles:
-  - [ ] read-only capability user;
-  - [ ] side-effect capability user only if enabled by admin;
-  - [ ] operator/admin role only for Admin API credentials when supported.
-- [ ] List built-in capability templates through `GET /v1/admin/capability-templates`.
-- [ ] Add helper actions for common provider setup:
-  - [ ] create application instance;
-  - [ ] create capability from template;
-  - [ ] create/rotate secret;
-  - [ ] create agent;
-  - [ ] rotate agent token;
-  - [ ] create binding.
-- [ ] Store module-created object ids in `state/bootstrap.json` for idempotency.
-- [ ] Ensure one-time agent tokens are returned only in the action response and optionally stored only when the admin explicitly requests it.
+  - [x] read-only capability user;
+  - [x] side-effect capability user only if enabled by admin;
+  - [x] operator/admin role only for Admin API credentials when supported.
+- [x] List built-in capability templates through `GET /v1/admin/capability-templates`.
+- [x] Add helper actions for common provider setup:
+  - [x] create application instance;
+  - [x] create capability from template;
+  - [x] create/rotate secret;
+  - [x] create agent;
+  - [x] rotate agent token;
+  - [x] create binding.
+- [x] Store module-created object ids in `state/bootstrap.json` for idempotency.
+- [x] Ensure one-time agent tokens are returned only in the action response and optionally stored only when the admin explicitly requests it.
 
 Acceptance:
 

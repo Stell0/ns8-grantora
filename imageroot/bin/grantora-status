@@ -10,6 +10,7 @@ from pathlib import Path
 HELPER = Path(__file__).resolve().parent / "grantora-env"
 ADMIN_HELPER = Path(__file__).resolve().parent / "grantora-admin"
 USERS_HELPER = Path(__file__).resolve().parent / "grantora-users"
+BOOTSTRAP_HELPER = Path(__file__).resolve().parent / "grantora-bootstrap"
 STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", Path.home() / ".local/state")) / "state"
 UNITS = [
     "grantora.service",
@@ -115,6 +116,16 @@ def user_sync_status() -> dict[str, object]:
         return {"error": "invalid_status"}
 
 
+def bootstrap_status() -> dict[str, object]:
+    result = command([BOOTSTRAP_HELPER, "status"])
+    if result.returncode != 0:
+        return {"error": result.stderr.strip() or "not_available"}
+    try:
+        return json.loads(result.stdout or "{}")
+    except json.JSONDecodeError:
+        return {"error": "invalid_status"}
+
+
 def main() -> None:
     env_result = subprocess.run([HELPER, "status"], text=True, check=True, capture_output=True)
     config = json.loads(env_result.stdout)
@@ -137,6 +148,7 @@ def main() -> None:
         "readyz": api_get("/readyz"),
         "apisix_sync": admin_get("/v1/admin/apisix/status"),
         "user_sync": user_sync_status(),
+        "bootstrap": bootstrap_status(),
     }
     health_body = output["healthz"].get("body")
     if isinstance(health_body, dict) and health_body.get("version"):

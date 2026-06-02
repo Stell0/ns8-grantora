@@ -2,7 +2,109 @@
 
 set -euo pipefail
 
-container="${1:-grantora-api}"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+admin_helper="${script_dir}/grantora-admin"
+allowed_containers=" grantora-api grantora-postgres grantora-apisix-etcd grantora-apisix "
+
+usage() {
+	cat >&2 <<'EOF'
+usage: grantora-pod-exec COMMAND [ARGS...]
+
+Commands:
+  api-get PATH                    GET an unauthenticated Grantora API path inside the pod
+  admin-get PATH                  GET a Grantora Admin API path through grantora-admin
+  admin-post PATH [JSON|@-|@file] POST a Grantora Admin API path through grantora-admin
+  pod-status                      Inspect the Grantora pod state
+  container-status CONTAINER      Inspect a Grantora container state
+  exec CONTAINER COMMAND [ARGS...] Execute an allowlisted pod container command
+
+Legacy form is also accepted: grantora-pod-exec CONTAINER COMMAND [ARGS...]
+EOF
+}
+
+require_path() {
+	local path="${1:-}"
+	if [[ -z "${path}" || "${path}" != /* ]]; then
+		echo "path must start with /" >&2
+		exit 2
+	fi
+}
+
+require_container() {
+	local container="${1:-}"
+	if [[ "${allowed_containers}" != *" ${container} "* ]]; then
+		echo "unsupported container: ${container}" >&2
+		exit 2
+	fi
+}
+
+exec_container() {
+	local container="${1:-}"
+	shift || true
+	require_container "${container}"
+	if (( $# == 0 )); then
+		echo "container command is required" >&2
+		exit 2
+	fi
+	exec podman exec "${container}" "$@"
+}
+
+command="${1:-}"
+if [[ -z "${command}" ]]; then
+	usage
+	exit 2
+fi
 shift || true
 
-exec podman exec "${container}" "$@"
+case "${command}" in
+	api-get)
+		path="${1:-}"
+		require_path "${path}"
+		exec podman exec grantora-api python - "${path}" <<'PY'
+import json
+import sys
+import urllib.error
+import urllib.request
+
+path = sys.argv[1]
+try:
+	with urllib.request.urlopen(f"http://127.0.0.1:8080{path}", timeout=10) as response:
+		sys.stdout.buffer.write(response.read())
+except urllib.error.HTTPError as exc:
+	sys.stderr.buffer.write(exc.read())
+	sys.exit(exc.code if exc.code < 128 else 1)
+PY
+		;;
+	admin-get)
+		path="${1:-}"
+		require_path "${path}"
+		exec "${admin_helper}" GET "${path}"
+		;;
+	admin-post)
+		path="${1:-}"
+		data="${2:-}"
+		require_path "${path}"
+		if [[ -n "${data}" ]]; then
+			exec "${admin_helper}" POST "${path}" --data-json "${data}"
+		fi
+		exec "${admin_helper}" POST "${path}"
+		;;
+	pod-status)
+		exec podman pod inspect grantora --format '{{.State}}'
+		;;
+	container-status)
+		container="${1:-}"
+		require_container "${container}"
+		exec podman inspect "${container}" --format '{{.State.Status}}'
+		;;
+	exec)
+		exec_container "$@"
+		;;
+	grantora-api|grantora-postgres|grantora-apisix-etcd|grantora-apisix)
+		exec_container "${command}" "$@"
+		;;
+	*)
+		usage
+		exit 2
+		;;
+esac

@@ -1,0 +1,11 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "create-binding output",
+    "$id": "http://schema.nethserver.org/grantora/create-binding-output.json",
+    "type": "object",
+    "required": ["action", "binding"],
+    "properties": {
+        "action": {"type": "string", "enum": ["created", "reused"]},
+        "binding": {"type": "object"}
+    }
+}

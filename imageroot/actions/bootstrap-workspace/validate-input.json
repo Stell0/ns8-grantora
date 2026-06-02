@@ -1,0 +1,13 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "bootstrap-workspace input",
+    "$id": "http://schema.nethserver.org/grantora/bootstrap-workspace-input.json",
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "workspace_slug": {"type": "string", "minLength": 1, "maxLength": 63},
+        "workspace_display_name": {"type": "string", "minLength": 1, "maxLength": 255},
+        "side_effect_role_enabled": {"type": "boolean"},
+        "provider_type": {"type": "string", "minLength": 1, "maxLength": 63}
+    }
+}

@@ -1,0 +1,11 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "create-user output",
+    "$id": "http://schema.nethserver.org/grantora/create-user-output.json",
+    "type": "object",
+    "required": ["action", "user"],
+    "properties": {
+        "action": {"type": "string", "enum": ["created", "reused"]},
+        "user": {"type": "object"}
+    }
+}

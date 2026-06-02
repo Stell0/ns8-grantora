@@ -17,6 +17,7 @@
         "readyz",
         "apisix_sync",
         "user_sync",
+        "bootstrap",
         "running_upstream_version"
     ],
     "properties": {
@@ -32,6 +33,7 @@
         "readyz": {"type": "object"},
         "apisix_sync": {"type": "object"},
         "user_sync": {"type": "object"},
+        "bootstrap": {"type": "object"},
         "running_upstream_version": {"type": "string"}
     }
 }

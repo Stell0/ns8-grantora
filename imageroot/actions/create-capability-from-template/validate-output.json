@@ -1,0 +1,11 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "create-capability-from-template output",
+    "$id": "http://schema.nethserver.org/grantora/create-capability-from-template-output.json",
+    "type": "object",
+    "required": ["action", "capability"],
+    "properties": {
+        "action": {"type": "string", "enum": ["created", "reused"]},
+        "capability": {"type": "object"}
+    }
+}

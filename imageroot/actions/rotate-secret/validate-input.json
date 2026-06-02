@@ -1,0 +1,21 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "rotate-secret input",
+    "$id": "http://schema.nethserver.org/grantora/rotate-secret-input.json",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["secret_id"],
+    "oneOf": [
+        {"required": ["secret_value"]},
+        {"required": ["external_reference"]}
+    ],
+    "properties": {
+        "secret_id": {"type": "string", "minLength": 1},
+        "secret_type": {
+            "type": "string",
+            "enum": ["api_key", "bearer_token", "basic_auth", "oauth_refresh_token", "session_cookie"]
+        },
+        "secret_value": {"type": "string", "minLength": 1},
+        "external_reference": {"type": "string", "minLength": 1, "maxLength": 512}
+    }
+}

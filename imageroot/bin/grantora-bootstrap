@@ -1,0 +1,794 @@
+#!/usr/bin/env python3
+
+import argparse
+import json
+import os
+import stat
+import subprocess
+import sys
+import time
+from pathlib import Path
+from urllib.parse import urlencode
+
+
+STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", Path.home() / ".local/state")) / "state"
+ADMIN_HELPER = Path(__file__).resolve().parent / "grantora-admin"
+ACTIVE_STATUS = "active"
+DEFAULT_WORKSPACE_SLUG = "default"
+DEFAULT_WORKSPACE_NAME = "Grantora Default Workspace"
+DEFAULT_ROLES = {
+    "read_only": {
+        "slug": "runtime-read-only",
+        "display_name": "Runtime read-only capability user",
+        "permission_codes": ["capability.describe", "capability.invoke.read_only"],
+    },
+    "side_effect": {
+        "slug": "runtime-side-effect",
+        "display_name": "Runtime side-effect capability user",
+        "permission_codes": [
+            "capability.describe",
+            "capability.invoke.read_only",
+            "capability.invoke.side_effect",
+        ],
+    },
+}
+
+
+class BootstrapError(RuntimeError):
+    pass
+
+
+def read_input() -> dict[str, object]:
+    raw_input = sys.stdin.read().strip()
+    if not raw_input:
+        return {}
+    payload = json.loads(raw_input)
+    if not isinstance(payload, dict):
+        raise BootstrapError("action input must be a JSON object")
+    return payload
+
+
+def load_json(path: Path, default: object) -> object:
+    if not path.exists():
+        return default
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return default
+
+
+def load_state() -> dict[str, object]:
+    state = load_json(STATE_DIR / "bootstrap.json", {})
+    if isinstance(state, dict):
+        return state
+    return {}
+
+
+def write_state(state: dict[str, object]) -> None:
+    state["updated_at"] = int(time.time())
+    path = STATE_DIR / "bootstrap.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+
+
+def state_map(state: dict[str, object], key: str) -> dict[str, object]:
+    value = state.setdefault(key, {})
+    if not isinstance(value, dict):
+        value = {}
+        state[key] = value
+    return value
+
+
+def admin_api(method: str, path: str, data: dict[str, object] | None = None) -> dict[str, object]:
+    args = [str(ADMIN_HELPER), method, path]
+    stdin = None
+    if data is not None:
+        args.extend(["--data-json", "@-"])
+        stdin = json.dumps(data)
+    result = subprocess.run(
+        args,
+        input=stdin,
+        text=True,
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise BootstrapError(safe_admin_error(method, path, result))
+    if not result.stdout.strip():
+        return {}
+    try:
+        response = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise BootstrapError(f"{method} {path} returned non-JSON output") from exc
+    if not isinstance(response, dict):
+        raise BootstrapError(f"{method} {path} returned a non-object JSON response")
+    return response
+
+
+def safe_admin_error(
+    method: str,
+    path: str,
+    result: subprocess.CompletedProcess[str],
+) -> str:
+    detail = f"{method} {path} failed with exit code {result.returncode}"
+    raw_error = (result.stderr or result.stdout or "").strip()
+    if not raw_error:
+        return detail
+    try:
+        document = json.loads(raw_error)
+    except json.JSONDecodeError:
+        return detail
+    error = document.get("error") if isinstance(document, dict) else None
+    if isinstance(error, dict):
+        code = error.get("code")
+        message = error.get("message")
+        if code and message:
+            return f"{detail} ({code}: {message})"
+    return detail
+
+
+def query_string(values: dict[str, object | None]) -> str:
+    pairs = []
+    for key, value in values.items():
+        if value is None:
+            continue
+        if isinstance(value, bool):
+            pairs.append((key, "true" if value else "false"))
+        else:
+            pairs.append((key, str(value)))
+    return urlencode(pairs)
+
+
+def list_collection(
+    path: str,
+    collection_key: str,
+    params: dict[str, object | None] | None = None,
+) -> list[dict[str, object]]:
+    params = dict(params or {})
+    limit = 500
+    offset = 0
+    items: list[dict[str, object]] = []
+    while True:
+        page_params = params | {"limit": limit, "offset": offset}
+        response = admin_api("GET", f"{path}?{query_string(page_params)}")
+        page = response.get(collection_key, [])
+        if not isinstance(page, list):
+            raise BootstrapError(f"{path} returned invalid {collection_key}")
+        items.extend(item for item in page if isinstance(item, dict))
+        if len(page) < limit:
+            return items
+        offset += limit
+
+
+def find_by(items: list[dict[str, object]], field: str, value: object) -> dict[str, object] | None:
+    return next((item for item in items if item.get(field) == value), None)
+
+
+def require_active(resource: dict[str, object], label: str, name: str) -> None:
+    status = resource.get("status")
+    if status != ACTIVE_STATUS:
+        raise BootstrapError(
+            f"{label} {name!r} already exists with status {status!r}; reactivate it first"
+        )
+
+
+def require_fields(
+    resource: dict[str, object],
+    expected: dict[str, object | None],
+    label: str,
+    name: str,
+) -> None:
+    for field, expected_value in expected.items():
+        if expected_value is None:
+            continue
+        actual_value = resource.get(field)
+        if actual_value != expected_value:
+            raise BootstrapError(
+                f"{label} {name!r} has {field}={actual_value!r}; expected {expected_value!r}"
+            )
+
+
+def resolve_workspace_id(payload: dict[str, object], state: dict[str, object]) -> str:
+    workspace_id = payload.get("workspace_id")
+    if workspace_id:
+        return str(workspace_id)
+    for key in ("workspace_id", "default_workspace_id"):
+        if state.get(key):
+            return str(state[key])
+    workspace = state.get("workspace")
+    if isinstance(workspace, dict) and workspace.get("id"):
+        return str(workspace["id"])
+    workspaces = list_collection(
+        "/v1/admin/workspaces",
+        "workspaces",
+        {"include_disabled": True},
+    )
+    active_workspaces = [
+        workspace for workspace in workspaces if workspace.get("status") == ACTIVE_STATUS
+    ]
+    if len(active_workspaces) == 1 and active_workspaces[0].get("id"):
+        return str(active_workspaces[0]["id"])
+    raise BootstrapError("workspace_id is required until bootstrap-workspace has selected one")
+
+
+def resource_ref(resource: dict[str, object], fields: tuple[str, ...]) -> dict[str, object]:
+    return {field: resource[field] for field in fields if field in resource}
+
+
+def ensure_workspace(
+    payload: dict[str, object],
+    state: dict[str, object],
+) -> tuple[dict[str, object], str]:
+    slug = str(payload.get("workspace_slug") or payload.get("slug") or DEFAULT_WORKSPACE_SLUG)
+    display_name = str(
+        payload.get("workspace_display_name")
+        or payload.get("display_name")
+        or DEFAULT_WORKSPACE_NAME
+    )
+    workspaces = list_collection(
+        "/v1/admin/workspaces",
+        "workspaces",
+        {"include_disabled": True},
+    )
+    workspace = find_by(workspaces, "slug", slug)
+    action = "reused"
+    if workspace is None:
+        workspace = admin_api(
+            "POST",
+            "/v1/admin/workspaces",
+            {"slug": slug, "display_name": display_name},
+        )["workspace"]
+        action = "created"
+    require_active(workspace, "workspace", slug)
+    state["workspace_id"] = workspace["id"]
+    state["default_workspace_id"] = workspace["id"]
+    state["workspace"] = resource_ref(workspace, ("id", "slug", "display_name", "status"))
+    return workspace, action
+
+
+def ensure_permissions() -> list[dict[str, object]]:
+    permissions = list_collection("/v1/admin/permissions", "permissions")
+    existing_codes = {str(permission.get("code")) for permission in permissions}
+    required_codes = {
+        code
+        for spec in DEFAULT_ROLES.values()
+        for code in spec["permission_codes"]
+    }
+    missing_codes = sorted(required_codes - existing_codes)
+    if missing_codes:
+        raise BootstrapError(f"default permissions are missing: {', '.join(missing_codes)}")
+    return permissions
+
+
+def ensure_role(
+    key: str,
+    spec: dict[str, object],
+    workspace_id: str,
+    state: dict[str, object],
+) -> tuple[dict[str, object], str]:
+    slug = str(spec["slug"])
+    roles = list_collection(
+        "/v1/admin/roles",
+        "roles",
+        {"workspace_id": workspace_id, "include_disabled": True},
+    )
+    role = find_by(roles, "slug", slug)
+    action = "reused"
+    permission_codes = list(spec["permission_codes"])
+    if role is None:
+        role = admin_api(
+            "POST",
+            "/v1/admin/roles",
+            {
+                "workspace_id": workspace_id,
+                "slug": slug,
+                "display_name": str(spec["display_name"]),
+                "permission_codes": permission_codes,
+            },
+        )["role"]
+        action = "created"
+    require_active(role, "role", slug)
+    missing_permissions = sorted(set(permission_codes) - set(role.get("permission_codes", [])))
+    if missing_permissions:
+        raise BootstrapError(
+            f"role {slug!r} exists without permissions: {', '.join(missing_permissions)}"
+        )
+    roles_state = state_map(state, "roles")
+    roles_state[key] = resource_ref(role, ("id", "workspace_id", "slug", "display_name", "status"))
+    return role, action
+
+
+def list_templates(payload: dict[str, object]) -> list[dict[str, object]]:
+    provider_type = payload.get("provider_type")
+    params = {"provider_type": provider_type} if provider_type else {}
+    return list_collection("/v1/admin/capability-templates", "templates", params)
+
+
+def bootstrap_workspace(payload: dict[str, object]) -> dict[str, object]:
+    state = load_state()
+    workspace, workspace_action = ensure_workspace(payload, state)
+    permissions = ensure_permissions()
+    role_results: dict[str, object] = {}
+    read_only_role, read_only_action = ensure_role(
+        "read_only",
+        DEFAULT_ROLES["read_only"],
+        str(workspace["id"]),
+        state,
+    )
+    role_results["read_only"] = {"action": read_only_action, "role": read_only_role}
+    if bool(payload.get("side_effect_role_enabled", False)):
+        side_effect_role, side_effect_action = ensure_role(
+            "side_effect",
+            DEFAULT_ROLES["side_effect"],
+            str(workspace["id"]),
+            state,
+        )
+        role_results["side_effect"] = {"action": side_effect_action, "role": side_effect_role}
+    templates = list_templates(payload)
+    state["capability_templates"] = {
+        "last_seen": int(time.time()),
+        "ids": [template.get("id") for template in templates],
+    }
+    state["operator_admin_role"] = {
+        "supported": False,
+        "reason": "upstream_admin_permissions_not_available",
+    }
+    write_state(state)
+    return {
+        "workspace": {"action": workspace_action, "workspace": workspace},
+        "permissions": permissions,
+        "roles": role_results,
+        "operator_admin_role_supported": False,
+        "capability_templates": templates,
+        "bootstrap_state": {
+            "workspace_id": state.get("workspace_id", ""),
+            "updated_at": state.get("updated_at", 0),
+        },
+    }
+
+
+def create_application(payload: dict[str, object]) -> dict[str, object]:
+    state = load_state()
+    workspace_id = resolve_workspace_id(payload, state)
+    slug = required_str(payload, "slug")
+    display_name = str(payload.get("display_name") or slug)
+    provider_type = required_str(payload, "provider_type")
+    base_url = payload.get("base_url")
+    applications = list_collection(
+        "/v1/admin/applications",
+        "applications",
+        {"workspace_id": workspace_id, "include_disabled": True},
+    )
+    application = find_by(applications, "slug", slug)
+    action = "reused"
+    if application is None:
+        request = {
+            "workspace_id": workspace_id,
+            "slug": slug,
+            "display_name": display_name,
+            "provider_type": provider_type,
+        }
+        if base_url:
+            request["base_url"] = str(base_url)
+        application = admin_api("POST", "/v1/admin/applications", request)["application"]
+        action = "created"
+    require_active(application, "application", slug)
+    require_fields(
+        application,
+        {"workspace_id": workspace_id, "provider_type": provider_type, "base_url": base_url},
+        "application",
+        slug,
+    )
+    state_map(state, "applications")[slug] = resource_ref(
+        application,
+        ("id", "workspace_id", "slug", "display_name", "provider_type", "base_url", "status"),
+    )
+    write_state(state)
+    return {"action": action, "application": application}
+
+
+def create_user(payload: dict[str, object]) -> dict[str, object]:
+    state = load_state()
+    workspace_id = resolve_workspace_id(payload, state)
+    external_id = required_str(payload, "external_id")
+    display_name = str(payload.get("display_name") or external_id)
+    users = list_collection(
+        "/v1/admin/users",
+        "users",
+        {"workspace_id": workspace_id, "include_disabled": True},
+    )
+    user = find_by(users, "external_id", external_id)
+    action = "reused"
+    if user is None:
+        user = admin_api(
+            "POST",
+            "/v1/admin/users",
+            {
+                "workspace_id": workspace_id,
+                "external_id": external_id,
+                "display_name": display_name,
+            },
+        )["user"]
+        action = "created"
+    require_active(user, "user", external_id)
+    state_map(state, "users")[external_id] = resource_ref(
+        user,
+        ("id", "workspace_id", "external_id", "display_name", "status"),
+    )
+    write_state(state)
+    return {"action": action, "user": user}
+
+
+def create_role(payload: dict[str, object]) -> dict[str, object]:
+    state = load_state()
+    workspace_id = resolve_workspace_id(payload, state)
+    slug = required_str(payload, "slug")
+    display_name = str(payload.get("display_name") or slug)
+    permission_codes = payload.get("permission_codes", [])
+    if not isinstance(permission_codes, list):
+        raise BootstrapError("permission_codes must be an array")
+    spec = {
+        "slug": slug,
+        "display_name": display_name,
+        "permission_codes": [str(code) for code in permission_codes],
+    }
+    role, action = ensure_role(slug, spec, workspace_id, state)
+    write_state(state)
+    return {"action": action, "role": role}
+
+
+def create_capability_from_template(payload: dict[str, object]) -> dict[str, object]:
+    state = load_state()
+    workspace_id = resolve_workspace_id(payload, state)
+    template_id = required_str(payload, "template_id")
+    application_id = required_str(payload, "application_instance_id")
+    capability_id = str(payload.get("id") or template_id)
+    capabilities = list_collection(
+        "/v1/admin/capabilities",
+        "capabilities",
+        {"workspace_id": workspace_id, "include_disabled": True},
+    )
+    capability = find_by(capabilities, "id", capability_id)
+    action = "reused"
+    if capability is None:
+        request = {
+            "template_id": template_id,
+            "workspace_id": workspace_id,
+            "application_instance_id": application_id,
+        }
+        for key in ("id", "name", "version", "status"):
+            if key in payload and payload[key] is not None:
+                request[key] = payload[key]
+        capability = admin_api(
+            "POST",
+            "/v1/admin/capabilities/from-template",
+            request,
+        )["capability"]
+        action = "created"
+    require_active(capability, "capability", capability_id)
+    require_fields(
+        capability,
+        {"workspace_id": workspace_id, "application_instance_id": application_id},
+        "capability",
+        capability_id,
+    )
+    state_map(state, "capabilities")[capability_id] = resource_ref(
+        capability,
+        (
+            "id",
+            "workspace_id",
+            "application_instance_id",
+            "name",
+            "provider_type",
+            "adapter",
+            "operation",
+            "risk_class",
+            "status",
+        ),
+    )
+    write_state(state)
+    return {"action": action, "capability": capability}
+
+
+def create_secret(payload: dict[str, object]) -> dict[str, object]:
+    state = load_state()
+    workspace_id = resolve_workspace_id(payload, state)
+    application_id = required_str(payload, "application_instance_id")
+    owner_type = required_str(payload, "owner_type")
+    owner_id = required_str(payload, "owner_id")
+    secret_type = required_str(payload, "secret_type")
+    value, external_reference = secret_source(payload)
+    secrets = list_collection(
+        "/v1/admin/secrets",
+        "secrets",
+        {
+            "workspace_id": workspace_id,
+            "application_instance_id": application_id,
+            "owner_type": owner_type,
+            "owner_id": owner_id,
+            "include_revoked": False,
+        },
+    )
+    secret = find_by(secrets, "secret_type", secret_type)
+    action = "reused"
+    if secret is None:
+        request = {
+            "workspace_id": workspace_id,
+            "application_instance_id": application_id,
+            "owner_type": owner_type,
+            "owner_id": owner_id,
+            "secret_type": secret_type,
+        }
+        if value is not None:
+            request["value"] = value
+        if external_reference is not None:
+            request["external_reference"] = external_reference
+        secret = admin_api("POST", "/v1/admin/secrets", request)["secret"]
+        action = "created"
+    require_secret_active(secret)
+    secret_key = f"{application_id}:{owner_type}:{owner_id}:{secret_type}"
+    state_map(state, "secrets")[secret_key] = resource_ref(
+        secret,
+        (
+            "id",
+            "workspace_id",
+            "application_instance_id",
+            "owner_type",
+            "owner_id",
+            "secret_type",
+            "status",
+        ),
+    )
+    write_state(state)
+    return {"action": action, "secret": secret}
+
+
+def rotate_secret(payload: dict[str, object]) -> dict[str, object]:
+    state = load_state()
+    secret_id = required_str(payload, "secret_id")
+    value, external_reference = secret_source(payload)
+    request: dict[str, object] = {}
+    if value is not None:
+        request["value"] = value
+    if external_reference is not None:
+        request["external_reference"] = external_reference
+    if payload.get("secret_type"):
+        request["secret_type"] = str(payload["secret_type"])
+    response = admin_api("POST", f"/v1/admin/secrets/{secret_id}/rotate", request)
+    rotated = state_map(state, "rotated_secrets")
+    replacement = response.get("secret")
+    if isinstance(replacement, dict):
+        rotated[secret_id] = resource_ref(
+            replacement,
+            (
+                "id",
+                "workspace_id",
+                "application_instance_id",
+                "owner_type",
+                "owner_id",
+                "secret_type",
+                "status",
+            ),
+        )
+    write_state(state)
+    return response
+
+
+def create_agent(payload: dict[str, object]) -> dict[str, object]:
+    state = load_state()
+    workspace_id = resolve_workspace_id(payload, state)
+    slug = required_str(payload, "slug")
+    display_name = str(payload.get("display_name") or slug)
+    agents = list_collection(
+        "/v1/admin/agents",
+        "agents",
+        {"workspace_id": workspace_id, "include_disabled": True},
+    )
+    agent = find_by(agents, "slug", slug)
+    token = None
+    action = "reused"
+    if agent is None:
+        response = admin_api(
+            "POST",
+            "/v1/admin/agents",
+            {"workspace_id": workspace_id, "slug": slug, "display_name": display_name},
+        )
+        agent = response["agent"]
+        token = str(response["token"])
+        action = "created"
+    require_active(agent, "agent", slug)
+    state_map(state, "agents")[slug] = resource_ref(
+        agent,
+        ("id", "workspace_id", "slug", "display_name", "status"),
+    )
+    stored_token_file = maybe_store_agent_token(payload, agent, token)
+    write_state(state)
+    return {
+        "action": action,
+        "agent": agent,
+        "agent_token": token,
+        "stored_token_file": stored_token_file,
+    }
+
+
+def rotate_agent_token(payload: dict[str, object]) -> dict[str, object]:
+    state = load_state()
+    agent_id = required_str(payload, "agent_id")
+    response = admin_api("POST", f"/v1/admin/agents/{agent_id}/rotate-token")
+    agent = response["agent"]
+    token = str(response["token"])
+    if isinstance(agent, dict) and agent.get("slug"):
+        state_map(state, "agents")[str(agent["slug"])] = resource_ref(
+            agent,
+            ("id", "workspace_id", "slug", "display_name", "status"),
+        )
+    stored_token_file = maybe_store_agent_token(payload, agent, token)
+    write_state(state)
+    return {
+        "action": "rotated",
+        "agent": agent,
+        "agent_token": token,
+        "stored_token_file": stored_token_file,
+    }
+
+
+def create_binding(payload: dict[str, object]) -> dict[str, object]:
+    state = load_state()
+    workspace_id = resolve_workspace_id(payload, state)
+    agent_id = required_str(payload, "agent_id")
+    user_id = required_str(payload, "user_id")
+    capability_id = required_str(payload, "capability_id")
+    role_id = required_str(payload, "role_id")
+    query = {
+        "workspace_id": workspace_id,
+        "agent_id": agent_id,
+        "user_id": user_id,
+        "capability_id": capability_id,
+        "role_id": role_id,
+        "include_disabled": True,
+    }
+    bindings = list_collection("/v1/admin/bindings", "bindings", query)
+    binding = bindings[0] if bindings else None
+    action = "reused"
+    if binding is None:
+        binding = admin_api(
+            "POST",
+            "/v1/admin/bindings",
+            {
+                "workspace_id": workspace_id,
+                "agent_id": agent_id,
+                "user_id": user_id,
+                "capability_id": capability_id,
+                "role_id": role_id,
+            },
+        )["binding"]
+        action = "created"
+    require_active(binding, "binding", capability_id)
+    binding_key = f"{agent_id}:{user_id}:{capability_id}:{role_id}"
+    state_map(state, "bindings")[binding_key] = resource_ref(
+        binding,
+        ("id", "workspace_id", "agent_id", "user_id", "capability_id", "role_id", "status"),
+    )
+    write_state(state)
+    return {"action": action, "binding": binding}
+
+
+def status() -> dict[str, object]:
+    state = load_state()
+    return {
+        "workspace_id": state.get("workspace_id", ""),
+        "workspace": state.get("workspace", {}),
+        "roles": state.get("roles", {}),
+        "applications": state.get("applications", {}),
+        "capabilities": state.get("capabilities", {}),
+        "users": state.get("users", {}),
+        "agents": state.get("agents", {}),
+        "bindings": state.get("bindings", {}),
+        "secrets": state.get("secrets", {}),
+        "capability_templates": state.get("capability_templates", {}),
+        "operator_admin_role": state.get("operator_admin_role", {}),
+        "updated_at": state.get("updated_at", 0),
+    }
+
+
+def secret_source(payload: dict[str, object]) -> tuple[str | None, str | None]:
+    value = payload.get("secret_value", payload.get("value"))
+    external_reference = payload.get("external_reference")
+    if (value is None) == (external_reference is None):
+        raise BootstrapError("provide exactly one of value or external_reference")
+    return value if value is None else str(value), (
+        external_reference if external_reference is None else str(external_reference)
+    )
+
+
+def require_secret_active(secret: dict[str, object]) -> None:
+    status_value = secret.get("status")
+    if status_value != ACTIVE_STATUS:
+        raise BootstrapError(f"secret already exists with status {status_value!r}")
+
+
+def maybe_store_agent_token(
+    payload: dict[str, object],
+    agent: object,
+    token: str | None,
+) -> str:
+    if token is None or not bool(payload.get("store_token", False)):
+        return ""
+    if not isinstance(agent, dict):
+        raise BootstrapError("cannot store token for invalid agent response")
+    slug = str(agent.get("slug") or agent.get("id") or "agent")
+    safe_slug = "".join(
+        character if character.isalnum() or character in "._-" else "_" for character in slug
+    )
+    path = STATE_DIR / "agent-tokens" / f"{safe_slug}.env"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "\n".join(
+            (
+                f"GRANTORA_AGENT_ID={agent.get('id', '')}",
+                f"GRANTORA_AGENT_SLUG={slug}",
+                f"GRANTORA_AGENT_TOKEN={token}",
+                "",
+            )
+        ),
+        encoding="utf-8",
+    )
+    path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    return f"state/agent-tokens/{safe_slug}.env"
+
+
+def required_str(payload: dict[str, object], key: str) -> str:
+    value = payload.get(key)
+    if value is None or str(value) == "":
+        raise BootstrapError(f"{key} is required")
+    return str(value)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Grantora bootstrap and admin helper actions")
+    parser.add_argument(
+        "command",
+        choices=[
+            "bootstrap-workspace",
+            "list-capability-templates",
+            "create-application",
+            "create-user",
+            "create-role",
+            "create-capability-from-template",
+            "create-secret",
+            "rotate-secret",
+            "create-agent",
+            "rotate-agent-token",
+            "create-binding",
+            "status",
+        ],
+    )
+    args = parser.parse_args()
+    try:
+        payload = {} if args.command == "status" else read_input()
+        handlers = {
+            "bootstrap-workspace": bootstrap_workspace,
+            "list-capability-templates": lambda data: {
+                "capability_templates": list_templates(data)
+            },
+            "create-application": create_application,
+            "create-user": create_user,
+            "create-role": create_role,
+            "create-capability-from-template": create_capability_from_template,
+            "create-secret": create_secret,
+            "rotate-secret": rotate_secret,
+            "create-agent": create_agent,
+            "rotate-agent-token": rotate_agent_token,
+            "create-binding": create_binding,
+            "status": lambda _data: status(),
+        }
+        json.dump(handlers[args.command](payload), sys.stdout)
+    except (BootstrapError, json.JSONDecodeError, subprocess.TimeoutExpired) as exc:
+        json.dump({"error": str(exc)}, sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

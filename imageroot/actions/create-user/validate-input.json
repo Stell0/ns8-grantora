@@ -1,0 +1,13 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "create-user input",
+    "$id": "http://schema.nethserver.org/grantora/create-user-input.json",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["external_id"],
+    "properties": {
+        "workspace_id": {"type": "string", "minLength": 1},
+        "external_id": {"type": "string", "minLength": 1, "maxLength": 255},
+        "display_name": {"type": "string", "minLength": 1, "maxLength": 255}
+    }
+}

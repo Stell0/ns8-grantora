@@ -1,0 +1,11 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "create-role output",
+    "$id": "http://schema.nethserver.org/grantora/create-role-output.json",
+    "type": "object",
+    "required": ["action", "role"],
+    "properties": {
+        "action": {"type": "string", "enum": ["created", "reused"]},
+        "role": {"type": "object"}
+    }
+}

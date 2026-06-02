@@ -1,0 +1,15 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "bootstrap-workspace output",
+    "$id": "http://schema.nethserver.org/grantora/bootstrap-workspace-output.json",
+    "type": "object",
+    "required": ["workspace", "permissions", "roles", "operator_admin_role_supported", "capability_templates", "bootstrap_state"],
+    "properties": {
+        "workspace": {"type": "object"},
+        "permissions": {"type": "array"},
+        "roles": {"type": "object"},
+        "operator_admin_role_supported": {"type": "boolean"},
+        "capability_templates": {"type": "array"},
+        "bootstrap_state": {"type": "object"}
+    }
+}

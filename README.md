@@ -2,7 +2,7 @@
 
 `ns8-grantora` packages the Grantora Agent Capability Gateway for NethServer 8 without forking upstream Grantora application logic.
 
-Milestone 2 adds the first configure flow described in [PLAN.md](PLAN.md). It starts Grantora as one rootless Podman pod with helper containers managed by separate user systemd units, publishes only the APISIX runtime port on loopback, and creates the public Traefik route to that runtime gateway.
+Milestone 4 adds the first bootstrap/admin helper flow described in [PLAN.md](PLAN.md). The module starts Grantora as one rootless Podman pod with helper containers managed by separate user systemd units, publishes only the APISIX runtime port on loopback, creates the public Traefik route to that runtime gateway, and provides NS8 actions for common Grantora Admin API setup.
 
 ## Current scope
 
@@ -14,6 +14,10 @@ Milestone 2 adds the first configure flow described in [PLAN.md](PLAN.md). It st
 - Generated env files and module secrets are rendered under `state/`; secret-bearing files are written with mode `0600`.
 - `configure-module` configures a Traefik route from `https://<host>/` to `http://127.0.0.1:${TCP_PORT}`.
 - `grantora-admin` calls private Grantora Admin API endpoints from inside the pod, including APISIX reconciliation.
+- `grantora-pod-exec` exposes safe pod-local health/status/Admin API calls with an allowlisted container exec fallback.
+- `bootstrap-workspace` creates or reuses the default workspace, seeds default runtime permissions/roles, lists built-in capability templates, and records ids in `state/bootstrap.json`.
+- Helper actions create applications, users, roles, capabilities from templates, agents, bindings, and secrets through pod-local Admin API calls.
+- One-time agent tokens are returned only by explicit create/rotate actions and are stored under `state/agent-tokens/` only when `store_token` is requested.
 - `get-defaults`, `get-configuration`, and `get-status` expose the initial operator-facing action contract.
 - CI validates markdown, shell scripts, Python action helpers, and action schema JSON.
 
@@ -55,6 +59,31 @@ api-cli run module/grantora1/get-configuration
 api-cli run module/grantora1/get-status
 ```
 
+## Bootstrap
+
+Create or reuse the default workspace and runtime roles:
+
+```bash
+api-cli run module/grantora1/bootstrap-workspace --data '{}'
+```
+
+Common provider setup actions are exposed as NS8 actions and call Grantora only from inside the pod:
+
+```bash
+api-cli run module/grantora1/list-capability-templates --data '{}'
+api-cli run module/grantora1/create-application --data '{"slug":"nextcloud","provider_type":"nextcloud","base_url":"https://nextcloud.example.org"}'
+api-cli run module/grantora1/create-capability-from-template --data '{"template_id":"nextcloud.files.search","application_instance_id":"<application-id>"}'
+api-cli run module/grantora1/create-agent --data '{"slug":"automation-agent","store_token":false}'
+api-cli run module/grantora1/create-binding --data '{"agent_id":"<agent-id>","user_id":"<user-id>","capability_id":"nextcloud.files.search","role_id":"<role-id>"}'
+```
+
+Secret actions use `secret_value` so NS8 task-context redaction can apply to sensitive input:
+
+```bash
+api-cli run module/grantora1/create-secret --data '{"application_instance_id":"<application-id>","owner_type":"user","owner_id":"<user-id>","secret_type":"bearer_token","secret_value":"<token>"}'
+api-cli run module/grantora1/rotate-secret --data '{"secret_id":"<secret-id>","secret_value":"<new-token>"}'
+```
+
 Useful service checks on the module instance:
 
 ```bash
@@ -68,7 +97,7 @@ podman pod port grantora
 
 ## Roadmap
 
-- User-domain binding, bootstrap helpers, backup/restore, upgrades, and the admin UI are tracked in [PLAN.md](PLAN.md) as later milestones.
+- Backup/restore, upgrades, and the admin UI are tracked in [PLAN.md](PLAN.md) as later milestones.
 
 ## Tests
 

@@ -1,0 +1,12 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "rotate-agent-token input",
+    "$id": "http://schema.nethserver.org/grantora/rotate-agent-token-input.json",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["agent_id"],
+    "properties": {
+        "agent_id": {"type": "string", "minLength": 1},
+        "store_token": {"type": "boolean"}
+    }
+}

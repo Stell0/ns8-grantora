@@ -1,0 +1,24 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "create-secret input",
+    "$id": "http://schema.nethserver.org/grantora/create-secret-input.json",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["application_instance_id", "owner_type", "owner_id", "secret_type"],
+    "oneOf": [
+        {"required": ["secret_value"]},
+        {"required": ["external_reference"]}
+    ],
+    "properties": {
+        "workspace_id": {"type": "string", "minLength": 1},
+        "application_instance_id": {"type": "string", "minLength": 1},
+        "owner_type": {"type": "string", "enum": ["workspace", "user", "agent"]},
+        "owner_id": {"type": "string", "minLength": 1},
+        "secret_type": {
+            "type": "string",
+            "enum": ["api_key", "bearer_token", "basic_auth", "oauth_refresh_token", "session_cookie"]
+        },
+        "secret_value": {"type": "string", "minLength": 1},
+        "external_reference": {"type": "string", "minLength": 1, "maxLength": 512}
+    }
+}

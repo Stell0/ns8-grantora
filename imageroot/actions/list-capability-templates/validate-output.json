@@ -1,0 +1,10 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "list-capability-templates output",
+    "$id": "http://schema.nethserver.org/grantora/list-capability-templates-output.json",
+    "type": "object",
+    "required": ["capability_templates"],
+    "properties": {
+        "capability_templates": {"type": "array"}
+    }
+}

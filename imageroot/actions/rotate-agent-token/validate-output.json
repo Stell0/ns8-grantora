@@ -1,0 +1,13 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "rotate-agent-token output",
+    "$id": "http://schema.nethserver.org/grantora/rotate-agent-token-output.json",
+    "type": "object",
+    "required": ["action", "agent", "agent_token", "stored_token_file"],
+    "properties": {
+        "action": {"type": "string", "enum": ["rotated"]},
+        "agent": {"type": "object"},
+        "agent_token": {"type": "string"},
+        "stored_token_file": {"type": "string"}
+    }
+}

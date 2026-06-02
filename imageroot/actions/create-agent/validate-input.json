@@ -1,0 +1,14 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "create-agent input",
+    "$id": "http://schema.nethserver.org/grantora/create-agent-input.json",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["slug"],
+    "properties": {
+        "workspace_id": {"type": "string", "minLength": 1},
+        "slug": {"type": "string", "minLength": 1, "maxLength": 63},
+        "display_name": {"type": "string", "minLength": 1, "maxLength": 255},
+        "store_token": {"type": "boolean"}
+    }
+}

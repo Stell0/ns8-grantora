@@ -1,0 +1,15 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "create-application input",
+    "$id": "http://schema.nethserver.org/grantora/create-application-input.json",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["slug", "provider_type"],
+    "properties": {
+        "workspace_id": {"type": "string", "minLength": 1},
+        "slug": {"type": "string", "minLength": 1, "maxLength": 63},
+        "display_name": {"type": "string", "minLength": 1, "maxLength": 255},
+        "provider_type": {"type": "string", "minLength": 1, "maxLength": 63},
+        "base_url": {"type": "string", "minLength": 1, "maxLength": 2048}
+    }
+}

@@ -1,0 +1,13 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "create-agent output",
+    "$id": "http://schema.nethserver.org/grantora/create-agent-output.json",
+    "type": "object",
+    "required": ["action", "agent", "stored_token_file"],
+    "properties": {
+        "action": {"type": "string", "enum": ["created", "reused"]},
+        "agent": {"type": "object"},
+        "agent_token": {"type": ["string", "null"]},
+        "stored_token_file": {"type": "string"}
+    }
+}
