@@ -1,0 +1,22 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "rotate-module-secrets output",
+    "$id": "http://schema.nethserver.org/grantora/rotate-module-secrets-output.json",
+    "description": "Safe Grantora module secret rotation summary",
+    "type": "object",
+    "required": ["ok", "changed", "rotated"],
+    "properties": {
+        "ok": {"type": "boolean"},
+        "changed": {"type": "boolean"},
+        "rotated": {
+            "type": "array",
+            "items": {"type": "string"}
+        },
+        "unsupported": {
+            "type": "array",
+            "items": {"type": "string"}
+        },
+        "apisix_sync": {"type": "object"},
+        "smoke": {"type": "object"}
+    }
+}

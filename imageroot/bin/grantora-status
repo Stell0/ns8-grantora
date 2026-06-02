@@ -40,6 +40,16 @@ def command(args: list[str], stdin: str | None = None) -> subprocess.CompletedPr
         return subprocess.CompletedProcess(args, 124, exc.stdout or "", exc.stderr or "timeout")
 
 
+def load_json(path: Path) -> dict[str, object]:
+    if not path.exists():
+        return {}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
 def unit_state(unit: str) -> str:
     result = command(["systemctl", "--user", "is-active", unit])
     return result.stdout.strip() or "unknown"
@@ -141,6 +151,7 @@ def main() -> None:
         "selected_user_domain": config.get("ldap_user_domain", ""),
         "sync_users_enabled": config.get("sync_users_enabled", False),
         "grantora_version": config["grantora_version"],
+        "grantora_image": config["grantora_image"],
         "pod": {"name": "grantora", "state": pod_state()},
         "units": {unit: unit_state(unit) for unit in UNITS},
         "containers": containers,
@@ -149,6 +160,8 @@ def main() -> None:
         "apisix_sync": admin_get("/v1/admin/apisix/status"),
         "user_sync": user_sync_status(),
         "bootstrap": bootstrap_status(),
+        "upgrade": load_json(STATE_DIR / "upgrade.json"),
+        "secret_rotation": load_json(STATE_DIR / "secret-rotation.json"),
     }
     health_body = output["healthz"].get("body")
     if isinstance(health_body, dict) and health_body.get("version"):

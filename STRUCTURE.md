@@ -21,6 +21,8 @@ Current repository map for `ns8-grantora` during the pod-based runtime packaging
 - `actions/backup-module/`: creates the logical PostgreSQL backup dump used by NS8 backup/restore.
 - `actions/restore-module/`: restores generated env/secret state, PostgreSQL data, route/user-domain bindings, APISIX reconciliation and smoke checks without exposing private services.
 - `actions/run-smoke/`: executes pod-local health, readiness, APISIX sync and runtime route/discovery checks.
+- `actions/upgrade-module/`: performs a safe upstream Grantora image/version upgrade with pre-upgrade dump, status/image snapshots, APISIX sync, smoke checks and safe failure records.
+- `actions/rotate-module-secrets/`: rotates safe module-level secrets and refuses unsupported pepper/encryption-key rotation until upstream support exists.
 - `actions/sync-users/`: syncs the selected NS8 user domain into Grantora users through pod-local Admin API calls.
 - `actions/bootstrap-workspace/`: creates or reuses the default Grantora workspace, seeds default runtime roles, lists templates, and records ids in `state/bootstrap.json`.
 - `actions/list-capability-templates/`: lists upstream built-in capability templates through the pod-local Admin API.
@@ -31,12 +33,13 @@ Current repository map for `ns8-grantora` during the pod-based runtime packaging
 - `bin/grantora-env`: idempotent state, secret, and env-file renderer for the runtime skeleton.
 - `bin/grantora-admin`: pod-local Grantora Admin API caller that reads admin bootstrap credentials from `state/secrets.env`.
 - `bin/grantora-bootstrap`: idempotent bootstrap/admin helper used by workspace, object, overview and agent lifecycle actions.
+- `bin/grantora-lifecycle`: safe upgrade and module-secret rotation helper used by lifecycle actions.
 - `bin/grantora-pg-dump` and `bin/grantora-pg-restore`: PostgreSQL custom-format dump/restore helpers executed through the private pod-local PostgreSQL container.
 - `bin/grantora-pod-exec`: safe pod-local health/status/API helper with allowlisted container exec fallback.
 - `bin/grantora-smoke`: pod-local smoke helper used by restore and the `run-smoke` action.
 - `bin/grantora-users`: NS8 account-domain discovery, binding, sync and sync-status helper.
 - `bin/module-dump-state` and `bin/module-cleanup-state`: NS8 backup hooks that create and clean the PostgreSQL dump around module state backup.
-- `etc/state-include.conf` and `etc/state-exclude.conf`: backup manifests for generated env/secrets/bootstrap/user-domain/explicit token state and exclusions for transient/generated data.
+- `etc/state-include.conf` and `etc/state-exclude.conf`: backup manifests for generated env/secrets/bootstrap/user-domain/lifecycle/explicit token state and exclusions for transient/generated data.
 - `systemd/user/grantora.service`: aggregate Grantora service.
 - `systemd/user/grantora-pod.service`: owns pod `grantora` and the only host port mapping, `127.0.0.1:${TCP_PORT}:9080`.
 - `systemd/user/grantora-postgres.service`: PostgreSQL helper container in the pod.

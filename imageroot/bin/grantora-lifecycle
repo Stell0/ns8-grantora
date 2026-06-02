@@ -1,0 +1,458 @@
+#!/usr/bin/env python3
+
+import argparse
+import hashlib
+import hmac
+import json
+import os
+import re
+import secrets
+import stat
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+BIN_DIR = Path(__file__).resolve().parent
+STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", Path.home() / ".local/state")) / "state"
+ENV_FILE = STATE_DIR / "environment"
+SECRETS_FILE = STATE_DIR / "secrets.env"
+ENV_HELPER = BIN_DIR / "grantora-env"
+STATUS_HELPER = BIN_DIR / "grantora-status"
+ADMIN_HELPER = BIN_DIR / "grantora-admin"
+PG_DUMP_HELPER = BIN_DIR / "grantora-pg-dump"
+SMOKE_HELPER = BIN_DIR / "grantora-smoke"
+
+DEFAULT_IMAGE = "ghcr.io/grantora/grantora-api:0.1.0"
+DEFAULT_VERSION = "0.1.0"
+IMAGE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+-]*[A-Za-z0-9]$")
+VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
+CONTAINERS = (
+    "grantora-postgres",
+    "grantora-apisix-etcd",
+    "grantora-api",
+    "grantora-apisix",
+)
+UNSUPPORTED_ROTATIONS = {
+    "rotate_agent_token_pepper": (
+        "agent token pepper rotation requires upstream token migration support"
+    ),
+    "rotate_secret_encryption_key": (
+        "encryption key rotation requires upstream re-encryption support"
+    ),
+}
+REDACT_PATTERNS = (
+    re.compile(r"(token|password|secret|key)=([^\s]+)", re.IGNORECASE),
+    re.compile(r"(Bearer\s+)[A-Za-z0-9._~+/=-]+", re.IGNORECASE),
+)
+
+
+class LifecycleError(RuntimeError):
+    pass
+
+
+def parse_envfile(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not path.exists():
+        return values
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key] = value
+    return values
+
+
+def write_envfile(path: Path, values: dict[str, str], secret: bool = False) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "".join(f"{key}={values[key]}\n" for key in sorted(values)),
+        encoding="utf-8",
+    )
+    if secret:
+        path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+
+
+def write_json(path: Path, value: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, sort_keys=True), encoding="utf-8")
+
+
+def read_payload() -> dict[str, object]:
+    raw_payload = sys.stdin.read()
+    if not raw_payload.strip():
+        return {}
+    payload = json.loads(raw_payload)
+    if not isinstance(payload, dict):
+        raise LifecycleError("action input must be a JSON object")
+    return payload
+
+
+def redact(value: str) -> str:
+    redacted = value
+    for pattern in REDACT_PATTERNS:
+        redacted = pattern.sub(lambda match: f"{match.group(1)}<redacted>", redacted)
+    return redacted
+
+
+def run(
+    args: list[str | Path],
+    *,
+    timeout: int = 120,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    try:
+        result = subprocess.run(
+            [str(arg) for arg in args],
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        result = subprocess.CompletedProcess([str(arg) for arg in args], 127, "", str(exc))
+    except subprocess.TimeoutExpired as exc:
+        result = subprocess.CompletedProcess(
+            [str(arg) for arg in args],
+            124,
+            exc.stdout or "",
+            exc.stderr or "timeout",
+        )
+    if check and result.returncode != 0:
+        detail = redact(
+            result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
+        )
+        raise LifecycleError(f"command failed: {Path(str(args[0])).name}: {detail}")
+    return result
+
+
+def json_from_command(args: list[str | Path], *, timeout: int = 120) -> dict[str, object]:
+    result = run(args, timeout=timeout)
+    try:
+        output = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError as exc:
+        raise LifecycleError(f"{Path(str(args[0])).name} returned invalid JSON") from exc
+    if not isinstance(output, dict):
+        raise LifecycleError(f"{Path(str(args[0])).name} returned non-object JSON")
+    return output
+
+
+def image_tag(image: str) -> str:
+    image_without_digest = image.split("@", 1)[0]
+    last_slash = image_without_digest.rfind("/")
+    last_colon = image_without_digest.rfind(":")
+    if last_colon > last_slash:
+        return image_without_digest[last_colon + 1 :]
+    return ""
+
+
+def image_for_version(current_image: str, version: str) -> str:
+    image_base = current_image.split("@", 1)[0]
+    last_slash = image_base.rfind("/")
+    last_colon = image_base.rfind(":")
+    if last_colon > last_slash:
+        image_base = image_base[:last_colon]
+    return f"{image_base}:{version}"
+
+
+def validate_image(image: str) -> None:
+    if not IMAGE_RE.fullmatch(image):
+        raise LifecycleError("grantora_image must be a valid image reference")
+    if "@sha256:" in image:
+        return
+    tag = image_tag(image)
+    if not tag or tag == "latest":
+        raise LifecycleError("grantora_image must use an immutable tag or sha256 digest")
+
+
+def validate_version(version: str) -> None:
+    if not VERSION_RE.fullmatch(version):
+        raise LifecycleError("grantora_version contains unsupported characters")
+
+
+def runtime_env() -> dict[str, str]:
+    env = parse_envfile(ENV_FILE)
+    env.setdefault("GRANTORA_IMAGE", DEFAULT_IMAGE)
+    env.setdefault("GRANTORA_VERSION", DEFAULT_VERSION)
+    return env
+
+
+def status_snapshot() -> dict[str, object]:
+    result = run([STATUS_HELPER], timeout=30, check=False)
+    if result.returncode != 0:
+        return {"ok": False, "error": redact(result.stderr.strip() or "not_available")}
+    try:
+        return {"ok": True, "status": json.loads(result.stdout or "{}")}
+    except json.JSONDecodeError:
+        return {"ok": False, "error": "invalid_status_output"}
+
+
+def container_image_snapshot() -> dict[str, object]:
+    result = run(["podman", "inspect", *CONTAINERS], timeout=30, check=False)
+    if result.returncode != 0:
+        return {"error": redact(result.stderr.strip() or "not_available")}
+    try:
+        inspected = json.loads(result.stdout or "[]")
+    except json.JSONDecodeError:
+        return {"error": "invalid_podman_inspect_output"}
+    snapshot: dict[str, object] = {}
+    for item in inspected:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("Name", "")).lstrip("/")
+        config = item.get("Config", {}) if isinstance(item.get("Config"), dict) else {}
+        snapshot[name] = {
+            "image": config.get("Image", ""),
+            "image_id": item.get("Image", ""),
+            "repo_digests": item.get("RepoDigests", []),
+        }
+    return snapshot
+
+
+def backup_for_upgrade(timestamp: int) -> dict[str, object]:
+    dump_file = STATE_DIR / "backups" / f"grantora-upgrade-{timestamp}.dump"
+    return json_from_command([PG_DUMP_HELPER, dump_file], timeout=900)
+
+
+def update_runtime_image(target_image: str, target_version: str) -> dict[str, str]:
+    previous_env = runtime_env()
+    next_env = parse_envfile(ENV_FILE)
+    next_env["GRANTORA_IMAGE"] = target_image
+    next_env["GRANTORA_VERSION"] = target_version
+    write_envfile(ENV_FILE, next_env)
+    run([ENV_HELPER, "render"], timeout=60)
+    return previous_env
+
+
+def restore_runtime_image(previous_env: dict[str, str]) -> None:
+    next_env = parse_envfile(ENV_FILE)
+    next_env["GRANTORA_IMAGE"] = previous_env.get("GRANTORA_IMAGE", DEFAULT_IMAGE)
+    next_env["GRANTORA_VERSION"] = previous_env.get("GRANTORA_VERSION", DEFAULT_VERSION)
+    write_envfile(ENV_FILE, next_env)
+    run([ENV_HELPER, "render"], timeout=60, check=False)
+    run(["systemctl", "--user", "restart", "grantora-api.service"], timeout=180, check=False)
+
+
+def wait_api_ready() -> None:
+    script = r'''
+import urllib.request
+
+urllib.request.urlopen("http://127.0.0.1:8080/readyz", timeout=5).read()
+'''
+    last_error = "not_ready"
+    for _attempt in range(60):
+        result = run(["podman", "exec", "grantora-api", "python", "-c", script], check=False)
+        if result.returncode == 0:
+            return
+        last_error = redact(result.stderr.strip() or result.stdout.strip() or "not_ready")
+        time.sleep(2)
+    raise LifecycleError(f"timed out waiting for Grantora API readiness: {last_error}")
+
+
+def wait_apisix() -> None:
+    last_error = "not_ready"
+    for _attempt in range(30):
+        result = run(
+            ["podman", "exec", "grantora-apisix", "sh", "-ec", "apisix status >/dev/null"],
+            check=False,
+        )
+        if result.returncode == 0:
+            return
+        last_error = redact(result.stderr.strip() or result.stdout.strip() or "not_ready")
+        time.sleep(2)
+    raise LifecycleError(f"timed out waiting for APISIX readiness: {last_error}")
+
+
+def sync_apisix() -> dict[str, object]:
+    result = run([ADMIN_HELPER, "POST", "/v1/admin/apisix/sync"], timeout=60)
+    try:
+        return json.loads(result.stdout or "{}")
+    except json.JSONDecodeError:
+        return {"ok": True}
+
+
+def smoke() -> dict[str, object]:
+    return json_from_command([SMOKE_HELPER], timeout=120)
+
+
+def run_migrations_if_available() -> dict[str, object]:
+    script = """
+if command -v grantora-migrate >/dev/null 2>&1; then
+    grantora-migrate upgrade
+else
+    exit 66
+fi
+"""
+    result = run(["podman", "exec", "grantora-api", "sh", "-ec", script], timeout=600, check=False)
+    if result.returncode == 66:
+        return {"ran": False, "status": "not_available"}
+    if result.returncode != 0:
+        raise LifecycleError(redact(result.stderr.strip() or "migration_failed"))
+    return {"ran": True, "status": "ok"}
+
+
+def record_upgrade(record: dict[str, object]) -> None:
+    write_json(STATE_DIR / "upgrade.json", record)
+    started_at = record.get("started_at", int(time.time()))
+    write_json(STATE_DIR / "upgrades" / f"{started_at}.json", record)
+
+
+def upgrade(payload: dict[str, object]) -> dict[str, object]:
+    env = runtime_env()
+    current_image = env["GRANTORA_IMAGE"]
+    current_version = env["GRANTORA_VERSION"]
+    target_version = str(payload.get("grantora_version") or "").strip()
+    if not target_version:
+        raise LifecycleError("grantora_version is required")
+    validate_version(target_version)
+    target_image = str(
+        payload.get("grantora_image") or image_for_version(current_image, target_version)
+    )
+    validate_image(target_image)
+
+    timestamp = int(time.time())
+    record: dict[str, object] = {
+        "started_at": timestamp,
+        "status": "running",
+        "from_version": current_version,
+        "to_version": target_version,
+        "from_image": current_image,
+        "to_image": target_image,
+        "backup": backup_for_upgrade(timestamp),
+        "pre_status": status_snapshot(),
+        "pre_images": container_image_snapshot(),
+    }
+    record_upgrade(record)
+
+    previous_env: dict[str, str] | None = None
+    migrations = {"ran": False, "status": "not_started"}
+    try:
+        if payload.get("pull", True):
+            run(["podman", "pull", target_image], timeout=900)
+        previous_env = update_runtime_image(target_image, target_version)
+        run(["systemctl", "--user", "start", "grantora-pod.service"], timeout=120)
+        run(["systemctl", "--user", "start", "grantora-postgres.service"], timeout=180)
+        run(["systemctl", "--user", "start", "grantora-apisix-etcd.service"], timeout=180)
+        run(["systemctl", "--user", "restart", "grantora-api.service"], timeout=240)
+        wait_api_ready()
+        migrations = run_migrations_if_available()
+        if migrations.get("ran"):
+            run(["systemctl", "--user", "restart", "grantora-api.service"], timeout=240)
+            wait_api_ready()
+        record.update(
+            {
+                "completed_at": int(time.time()),
+                "status": "ok",
+                "migrations": migrations,
+                "apisix_sync": sync_apisix(),
+                "smoke": smoke(),
+                "post_status": status_snapshot(),
+                "post_images": container_image_snapshot(),
+            }
+        )
+        record_upgrade(record)
+        return {"ok": True, "upgrade": record}
+    except Exception as exc:
+        rolled_back = False
+        if (
+            previous_env is not None
+            and not migrations.get("ran")
+            and payload.get("rollback_on_failure", True)
+        ):
+            restore_runtime_image(previous_env)
+            rolled_back = True
+        record.update(
+            {
+                "failed_at": int(time.time()),
+                "status": "failed",
+                "error": redact(str(exc)),
+                "rolled_back": rolled_back,
+                "migrations": migrations,
+            }
+        )
+        record_upgrade(record)
+        raise LifecycleError(record["error"])
+
+
+def recompute_admin_hash(secrets_env: dict[str, str]) -> None:
+    digest = hmac.new(
+        secrets_env["GRANTORA_AGENT_TOKEN_PEPPER"].encode(),
+        secrets_env["ADMIN_BOOTSTRAP_TOKEN"].encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    secrets_env["GRANTORA_ADMIN_BOOTSTRAP_TOKEN_HASH"] = f"hmac-sha256:{digest}"
+
+
+def rotate_module_secrets(payload: dict[str, object]) -> dict[str, object]:
+    for key, message in UNSUPPORTED_ROTATIONS.items():
+        if payload.get(key):
+            raise LifecycleError(message)
+
+    explicit_safe_choice = any(
+        key in payload for key in ("rotate_apisix_admin_key", "rotate_admin_bootstrap_token")
+    )
+    rotate_apisix_key = bool(payload.get("rotate_apisix_admin_key", not explicit_safe_choice))
+    rotate_admin_token = bool(payload.get("rotate_admin_bootstrap_token", not explicit_safe_choice))
+    if not rotate_apisix_key and not rotate_admin_token:
+        return {"ok": True, "rotated": [], "changed": False}
+
+    run([ENV_HELPER, "render"], timeout=60)
+    secrets_env = parse_envfile(SECRETS_FILE)
+    required = {"GRANTORA_AGENT_TOKEN_PEPPER", "ADMIN_BOOTSTRAP_TOKEN", "APISIX_ADMIN_KEY"}
+    missing = sorted(required - set(secrets_env))
+    if missing:
+        raise LifecycleError(f"missing generated secret keys: {', '.join(missing)}")
+
+    rotated: list[str] = []
+    if rotate_apisix_key:
+        secrets_env["APISIX_ADMIN_KEY"] = secrets.token_urlsafe(32)
+        rotated.append("APISIX_ADMIN_KEY")
+    if rotate_admin_token:
+        secrets_env["ADMIN_BOOTSTRAP_TOKEN"] = f"grantora-admin-{secrets.token_urlsafe(24)}"
+        rotated.append("ADMIN_BOOTSTRAP_TOKEN")
+    recompute_admin_hash(secrets_env)
+    write_envfile(SECRETS_FILE, secrets_env, secret=True)
+    run([ENV_HELPER, "render"], timeout=60)
+
+    run(["systemctl", "--user", "stop", "grantora-apisix.service"], timeout=120, check=False)
+    run(["systemctl", "--user", "restart", "grantora-api.service"], timeout=240)
+    wait_api_ready()
+    run(["systemctl", "--user", "start", "grantora-apisix.service"], timeout=180)
+    wait_apisix()
+
+    record = {
+        "rotated_at": int(time.time()),
+        "rotated": rotated,
+        "unsupported": ["GRANTORA_AGENT_TOKEN_PEPPER", "SECRET_ENCRYPTION_KEY"],
+    }
+    write_json(STATE_DIR / "secret-rotation.json", record)
+    return {
+        "ok": True,
+        "changed": True,
+        "rotated": rotated,
+        "unsupported": record["unsupported"],
+        "apisix_sync": sync_apisix(),
+        "smoke": smoke(),
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Grantora lifecycle helpers")
+    parser.add_argument("command", choices=["upgrade", "rotate-module-secrets"])
+    args = parser.parse_args()
+    try:
+        payload = read_payload()
+        if args.command == "upgrade":
+            output = upgrade(payload)
+        else:
+            output = rotate_module_secrets(payload)
+        json.dump(output, sys.stdout)
+    except Exception as exc:
+        print(redact(str(exc)), file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

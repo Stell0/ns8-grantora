@@ -1,0 +1,29 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "upgrade-module input",
+    "$id": "http://schema.nethserver.org/grantora/upgrade-module-input.json",
+    "description": "Safely upgrade the upstream Grantora API image used by the module",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["grantora_version"],
+    "properties": {
+        "grantora_version": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
+        },
+        "grantora_image": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]*[A-Za-z0-9]$"
+        },
+        "pull": {
+            "type": "boolean",
+            "default": true
+        },
+        "rollback_on_failure": {
+            "type": "boolean",
+            "default": true
+        }
+    }
+}

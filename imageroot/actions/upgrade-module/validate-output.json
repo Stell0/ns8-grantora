@@ -1,0 +1,33 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "upgrade-module output",
+    "$id": "http://schema.nethserver.org/grantora/upgrade-module-output.json",
+    "description": "Grantora upgrade summary",
+    "type": "object",
+    "required": ["ok", "upgrade"],
+    "properties": {
+        "ok": {"type": "boolean"},
+        "upgrade": {
+            "type": "object",
+            "required": [
+                "status",
+                "from_version",
+                "to_version",
+                "from_image",
+                "to_image",
+                "backup"
+            ],
+            "properties": {
+                "status": {"type": "string"},
+                "from_version": {"type": "string"},
+                "to_version": {"type": "string"},
+                "from_image": {"type": "string"},
+                "to_image": {"type": "string"},
+                "backup": {"type": "object"},
+                "migrations": {"type": "object"},
+                "apisix_sync": {"type": "object"},
+                "smoke": {"type": "object"}
+            }
+        }
+    }
+}

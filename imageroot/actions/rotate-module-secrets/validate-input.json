@@ -1,0 +1,26 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "rotate-module-secrets input",
+    "$id": "http://schema.nethserver.org/grantora/rotate-module-secrets-input.json",
+    "description": "Rotate safe Grantora module-level secrets",
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "rotate_apisix_admin_key": {
+            "type": "boolean",
+            "default": true
+        },
+        "rotate_admin_bootstrap_token": {
+            "type": "boolean",
+            "default": true
+        },
+        "rotate_agent_token_pepper": {
+            "type": "boolean",
+            "default": false
+        },
+        "rotate_secret_encryption_key": {
+            "type": "boolean",
+            "default": false
+        }
+    }
+}

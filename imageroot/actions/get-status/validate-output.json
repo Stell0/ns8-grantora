@@ -10,6 +10,7 @@
         "selected_user_domain",
         "sync_users_enabled",
         "grantora_version",
+        "grantora_image",
         "pod",
         "units",
         "containers",
@@ -18,6 +19,8 @@
         "apisix_sync",
         "user_sync",
         "bootstrap",
+        "upgrade",
+        "secret_rotation",
         "running_upstream_version"
     ],
     "properties": {
@@ -26,6 +29,7 @@
         "selected_user_domain": {"type": "string"},
         "sync_users_enabled": {"type": "boolean"},
         "grantora_version": {"type": "string"},
+        "grantora_image": {"type": "string"},
         "pod": {"type": "object"},
         "units": {"type": "object"},
         "containers": {"type": "object"},
@@ -34,6 +38,8 @@
         "apisix_sync": {"type": "object"},
         "user_sync": {"type": "object"},
         "bootstrap": {"type": "object"},
+        "upgrade": {"type": "object"},
+        "secret_rotation": {"type": "object"},
         "running_upstream_version": {"type": "string"}
     }
 }
