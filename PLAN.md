@@ -844,27 +844,27 @@ Objective: document installation, pod topology, configuration, operation, securi
 
 Tasks:
 
-- [ ] Rewrite `README.md` for NS8 operators.
-- [ ] Document install from image and from Software Center when repository metadata exists.
-- [ ] Document the pod/container systemd topology.
-- [ ] Document configuration fields.
-- [ ] Document selected user provider behavior.
-- [ ] Document public/private exposure matrix.
-- [ ] Document backup/restore order.
-- [ ] Document upgrade procedure.
-- [ ] Document first provider setup examples:
-  - [ ] mock/demo capability;
-  - [ ] NethVoice phonebook search;
-  - [ ] Nextcloud files search.
-- [ ] Document how to generate and store upstream provider secrets safely.
-- [ ] Document agent integration with `/v1/mcp/tools`, `/v1/mcp/call`, filtered OpenAPI and runtime bearer tokens.
-- [ ] Document unsupported features and future work.
+- [x] Rewrite `README.md` for NS8 operators.
+- [x] Document install from image and from Software Center when repository metadata exists.
+- [x] Document the pod/container systemd topology.
+- [x] Document configuration fields.
+- [x] Document selected user provider behavior.
+- [x] Document public/private exposure matrix.
+- [x] Document backup/restore order.
+- [x] Document upgrade procedure.
+- [x] Document first provider setup examples:
+  - [x] mock/demo capability;
+  - [x] NethVoice phonebook search;
+  - [x] Nextcloud files search.
+- [x] Document how to generate and store upstream provider secrets safely.
+- [x] Document agent integration with `/v1/mcp/tools`, `/v1/mcp/call`, filtered OpenAPI and runtime bearer tokens.
+- [x] Document unsupported features and future work.
 
 Acceptance:
 
-- [ ] A new NS8 admin can install and configure Grantora from README and UI.
-- [ ] Documentation clearly says Grantora runtime endpoint is public to agents, while admin/operator surfaces are private and pod-local.
-- [ ] Documentation does not instruct users to paste upstream secrets into agents.
+- [x] A new NS8 admin can install and configure Grantora from README and UI.
+- [x] Documentation clearly says Grantora runtime endpoint is public to agents, while admin/operator surfaces are private and pod-local.
+- [x] Documentation does not instruct users to paste upstream secrets into agents.
 
 Upstream Grantora work:
 

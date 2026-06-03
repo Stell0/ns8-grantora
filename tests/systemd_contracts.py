@@ -65,6 +65,18 @@ def test_lifecycle_restore_and_security_smoke_contracts() -> None:
     assert "rollback_on_failure" in upgrade
 
 
+def test_build_image_declares_runtime_scan_targets() -> None:
+    build_script = read("build-images.sh")
+    assert "org.nethserver.images=" in build_script
+    for image in (
+        "ghcr.io/grantora/grantora-api:0.1.0",
+        "docker.io/library/postgres:16-alpine",
+        "docker.io/bitnamilegacy/etcd:3.5",
+        "docker.io/apache/apisix:3.10.0-debian",
+    ):
+        assert image in build_script
+
+
 def test_ci_runs_static_unit_security_build_and_robot_gates() -> None:
     lint_workflow = read(".github/workflows/lint-module.yml")
     assert "Run action contract checks" in lint_workflow

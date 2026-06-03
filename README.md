@@ -2,142 +2,219 @@
 
 `ns8-grantora` packages the Grantora Agent Capability Gateway for NethServer 8 without forking upstream Grantora application logic.
 
-The module starts Grantora as one rootless Podman pod with helper containers managed by separate user systemd units, publishes only the APISIX runtime port on loopback, creates the public Traefik route to that runtime gateway, and provides NS8 actions for common Grantora Admin API setup and operations.
+The module runs Grantora as one rootless Podman pod, exposes only the APISIX runtime gateway through Traefik, keeps Grantora Admin API and infrastructure ports private, and gives cluster administrators both UI pages and NS8 actions for installation, user sync, bootstrap, backup, restore, upgrade, and day-2 operations.
 
-## Current scope
+## What This Module Deploys
 
-- Repository identity is `ns8-grantora` across docs, tests, UI metadata, and image build output.
-- The module image reserves one TCP port for the APISIX runtime route.
-- NS8 authorizations are prepared for Traefik route management and account-domain consumption.
-- The runtime skeleton creates one Podman pod named `grantora` and publishes only `127.0.0.1:${TCP_PORT}:9080`.
-- PostgreSQL, APISIX etcd, Grantora API, and APISIX each have their own inspectable user service.
-- Generated env files and module secrets are rendered under `state/`; secret-bearing files are written with mode `0600`.
-- `configure-module` configures a Traefik route from `https://<host>/` to `http://127.0.0.1:${TCP_PORT}`.
-- `grantora-admin` calls private Grantora Admin API endpoints from inside the pod, including APISIX reconciliation.
-- `run-smoke` verifies private runtime paths, loopback-only pod port publishing, and `0600` modes on secret-bearing state files.
-- `grantora-pod-exec` exposes safe pod-local health/status/Admin API calls with an allowlisted container exec fallback.
-- `grantora-operations` exposes redacted operator helpers for user-journal logs, private metrics, and audit/usage retention.
-- `bootstrap-workspace` creates or reuses the default workspace, seeds default runtime permissions/roles, lists built-in capability templates, and records ids in `state/bootstrap.json`.
-- Helper actions create applications, users, roles, capabilities from templates, agents, bindings, and secrets through pod-local Admin API calls.
-- One-time agent tokens are returned only by explicit create/rotate actions and are stored under `state/agent-tokens/` only when `store_token` is requested.
-- `get-defaults`, `get-configuration`, and `get-status` expose the operator-facing action contract, including pod/container state, liveness/readiness, APISIX sync, user sync, metrics, logs, retention, and container version metadata.
-- `run-retention` can dry-run or apply upstream audit/usage pruning through the private Grantora API container, and `grantora-retention.timer` applies configured retention periodically.
-- CI validates markdown, shell scripts, Python action helpers, and action schema JSON.
+- One rootless Podman pod named `grantora`.
+- One public Traefik route to APISIX runtime only.
+- One private Grantora Admin API reachable only from inside the pod.
+- Separate user systemd units for pod, PostgreSQL, APISIX etcd, Grantora API, APISIX, user sync, and retention.
+- NS8 UI pages for Status, Settings, Workspace, Agents, Applications, and Activity.
+- NS8 actions for bootstrap, user sync, secret management, retention, smoke, backup, restore, and upgrade.
+
+Grantora remains the upstream application of record. Dynamic state stays in PostgreSQL, APISIX etcd remains generated runtime state, and the NS8 module owns generated environment files, secrets, routes, timers, and lifecycle automation.
 
 ## Install
 
-Build the module image locally:
+### Install from a published image
+
+Build and publish the module image, or use a released module image tag:
 
 ```bash
 ./build-images.sh
+add-module ghcr.io/nethserver/grantora:<module-tag> 1
 ```
 
-Then instantiate the module with the image you published, for example:
+The trailing `1` reserves the single TCP port requested by the module image. Prefer immutable module tags for releases.
 
-```bash
-add-module ghcr.io/nethserver/grantora:latest 1
+### Install from Software Center
+
+When repository metadata is published for this module, install it from NS8 Software Center instead of `add-module`:
+
+1. Open Software Center.
+2. Search for Grantora.
+3. Install the module on the target node.
+4. Confirm the single requested TCP port allocation.
+5. Open the module and continue in the `Settings` page.
+
+The Software Center install path still deploys the same rootless pod and only publishes the APISIX runtime port through the module-managed route.
+
+## Topology And Exposure
+
+Runtime flow:
+
+```text
+Agent or automation client
+	-> NS8 Traefik public route
+	-> 127.0.0.1:<TCP_PORT>
+	-> grantora Podman pod
+	-> APISIX runtime port 9080
+	-> Grantora API internal port 8080
+	-> PostgreSQL internal port 5432
 ```
 
-The command returns the instance name, for example:
+Systemd user units:
 
-```json
-{"module_id": "grantora1", "image_name": "grantora", "image_url": "ghcr.io/nethserver/grantora:latest"}
+```text
+grantora.service
+grantora-pod.service
+grantora-postgres.service
+grantora-apisix-etcd.service
+grantora-api.service
+grantora-apisix.service
+grantora-user-sync.timer
+grantora-user-sync.service
+grantora-retention.timer
+grantora-retention.service
 ```
 
-## Configure
+Only `grantora-pod.service` publishes a host port, and it publishes only `127.0.0.1:${TCP_PORT}:9080`.
 
-`configure-module` renders state/env files, starts the runtime services, configures the public APISIX runtime route, and reconciles APISIX through the pod-local Grantora Admin API.
+### Public and private surfaces
 
-```bash
-api-cli run module/grantora1/configure-module --data '{"host":"grantora.example.org","lets_encrypt":false}'
-```
+| Surface | Location | Exposure | Access path |
+| --- | --- | --- | --- |
+| Runtime API | `https://<host>/v1/*` | Public to authenticated agents | Traefik -> APISIX |
+| Static runtime OpenAPI | `GET /v1/openapi.json` | Public runtime contract | APISIX |
+| Filtered capability OpenAPI | `GET /v1/capabilities/openapi.json?user=<external_id>` | Public to authenticated agents | APISIX |
+| MCP tool discovery | `GET /v1/mcp/tools?user=<external_id>` | Public to authenticated agents | APISIX |
+| MCP tool call | `POST /v1/mcp/call` | Public to authenticated agents | APISIX |
+| Grantora Admin API | `http://127.0.0.1:8080/v1/admin/*` | Private | `grantora-admin` or `grantora-pod-exec` |
+| Health and readiness | `http://127.0.0.1:8080/healthz`, `readyz` | Private | `get-status`, `grantora-pod-exec` |
+| Metrics | `http://127.0.0.1:8080/metrics` | Private | `grantora-pod-exec metrics` |
+| APISIX Admin API | `http://127.0.0.1:9180` | Private | Pod-local only |
+| PostgreSQL | `127.0.0.1:5432` inside pod | Private | Pod-local only |
+| APISIX etcd | `127.0.0.1:2379` inside pod | Private | Pod-local only |
 
-The action starts `grantora.service`, which pulls and runs the configured upstream Grantora, PostgreSQL, APISIX etcd, and APISIX images. The only host port mapping is the loopback APISIX runtime port owned by `grantora-pod.service`; Grantora Admin API, APISIX Admin API, PostgreSQL, and etcd stay private inside the pod.
+Do not add Traefik routes or host port mappings for `8080`, `9180`, `5432`, or `2379`. Grantora runtime endpoints are public to agents by design. Admin and operator surfaces stay pod-local.
 
-The selected runtime port cannot be one of the pod-local service ports `2379`, `5432`, `8080`, or `9180`. Application upstream `base_url` values entered through actions or the UI must be absolute `http` or `https` URLs; upstream Grantora performs origin safety validation before adapters use those URLs.
+## First-Time Configuration
 
-Query defaults and status:
+The recommended operator flow uses the UI first and CLI actions second.
+
+### UI flow
+
+1. Open the Grantora module in cluster-admin.
+2. In `Settings`, configure the public hostname, runtime image settings, user provider, runtime policy, and upstream defaults.
+3. Save the configuration.
+4. In `Status`, verify pod state, systemd units, `/healthz`, `/readyz`, APISIX sync, and public runtime URL.
+5. In `Workspace`, run `Bootstrap workspace`, then `Sync users now` if LDAP sync is enabled.
+6. In `Applications`, create application instances, capabilities, bindings, and secrets.
+7. In `Agents`, create an agent and capture the one-time token if you need a runtime client.
+8. In `Activity`, review audit events and usage summaries.
+
+UI pages map directly to NS8 actions. The UI does not talk to Grantora Admin API over a public route.
+
+### CLI flow
+
+Query defaults first:
 
 ```bash
 api-cli run module/grantora1/get-defaults
 api-cli run module/grantora1/get-configuration
-api-cli run module/grantora1/get-status
 ```
 
-## Bootstrap
+Then configure the instance:
 
-Create or reuse the default workspace and runtime roles:
+```bash
+api-cli run module/grantora1/configure-module --data '{
+	"host": "grantora.example.org",
+	"lets_encrypt": true,
+	"user_domain": "ad.example.org",
+	"sync_users_enabled": true,
+	"sync_users_interval_minutes": 60,
+	"grantora_image": "ghcr.io/grantora/grantora-api",
+	"grantora_version": "0.1.0",
+	"metrics_enabled": true,
+	"log_level": "INFO",
+	"runtime_rate_limit_count": 1000,
+	"runtime_rate_limit_time_window": 60,
+	"audit_retention_days": 365,
+	"usage_retention_days": 365,
+	"upstream_tls_verify": true,
+	"upstream_timeout_seconds": 30,
+	"upstream_connect_timeout_seconds": 10,
+	"upstream_max_response_bytes": 1048576,
+	"upstream_read_retry_attempts": 2
+}'
+```
+
+`configure-module` renders generated env files under `state/`, preserves previously generated secrets, starts `grantora.service`, creates the Traefik route, and triggers APISIX sync through the private Admin API helper.
+
+### Configuration fields
+
+Use `get-defaults` or the `Settings` page as the source of current defaults. The main fields are:
+
+| Field | Meaning | Notes |
+| --- | --- | --- |
+| `host` | Public FQDN for agents | Required. Must be a fully qualified hostname. |
+| `lets_encrypt` | NS8 certificate request | Controls Traefik certificate automation. |
+| `tcp_port` | Loopback APISIX runtime port | Must not be `2379`, `5432`, `8080`, or `9180`. |
+| `grantora_image` | Upstream Grantora API image | Use a stable registry and immutable tags for production. |
+| `grantora_version` | Upstream Grantora version tag | Used by upgrade and status reporting. |
+| `log_level` | Grantora application log level | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. |
+| `metrics_enabled` | Private metrics endpoint toggle | Keeps metrics pod-local. |
+| `user_domain` | Selected NS8 account provider | Enables managed LDAP user sync when present. |
+| `sync_users_enabled` | LDAP sync toggle | When disabled, users are managed manually in Grantora. |
+| `sync_users_interval_minutes` | Periodic LDAP sync interval | Drives `grantora-user-sync.timer`. |
+| `runtime_rate_limit_count` | APISIX runtime limit count | Applies to public runtime traffic. |
+| `runtime_rate_limit_time_window` | APISIX rate-limit window in seconds | Pairs with runtime rate limit count. |
+| `audit_retention_days` | Audit data retention window | Used by the retention timer and manual retention action. |
+| `usage_retention_days` | Usage data retention window | Used by the retention timer and manual retention action. |
+| `upstream_tls_verify` | TLS verification for provider calls | Keep enabled unless the upstream deployment requires an explicit exception. |
+| `upstream_timeout_seconds` | Total upstream request timeout | Bounded to avoid hanging adapters. |
+| `upstream_connect_timeout_seconds` | Upstream connect timeout | Separate connect timeout for slower networks. |
+| `upstream_max_response_bytes` | Maximum upstream payload size | Prevents oversized responses from reaching adapters. |
+| `upstream_read_retry_attempts` | Retry count for read-only upstream operations | Use low values only for idempotent reads. |
+
+## Selected User Provider Behavior
+
+The module is an NS8 account-domain consumer. User provider handling is owned by NS8, not by Grantora.
+
+- `get-configuration` and the `Settings` page list available user domains, including schema, provider module, and reachability.
+- The selected domain is bound to the module during configuration.
+- LDAP usernames are synced into Grantora as `external_id` values.
+- Hidden or locked LDAP users are not imported.
+- Previously managed users that disappear from the selected domain can be disabled on later syncs.
+- LDAP passwords are never stored in Grantora and are never passed to agents.
+- If no suitable domain is available, leave sync disabled and create Grantora users explicitly.
+
+Useful commands:
+
+```bash
+api-cli run module/grantora1/get-configuration
+api-cli run module/grantora1/sync-users
+grantora-users status
+```
+
+## Workspace Bootstrap And Day-2 Operations
+
+Bootstrap the default workspace and roles:
 
 ```bash
 api-cli run module/grantora1/bootstrap-workspace --data '{}'
-```
-
-Common provider setup actions are exposed as NS8 actions and call Grantora only from inside the pod:
-
-```bash
 api-cli run module/grantora1/list-capability-templates --data '{}'
-api-cli run module/grantora1/create-application --data '{"slug":"nextcloud","provider_type":"nextcloud","base_url":"https://nextcloud.example.org"}'
-api-cli run module/grantora1/create-capability-from-template --data '{"template_id":"nextcloud.files.search","application_instance_id":"<application-id>"}'
-api-cli run module/grantora1/create-agent --data '{"slug":"automation-agent","store_token":false}'
-api-cli run module/grantora1/create-binding --data '{"agent_id":"<agent-id>","user_id":"<user-id>","capability_id":"nextcloud.files.search","role_id":"<role-id>"}'
 ```
 
-Secret actions use `secret_value` so NS8 task-context redaction can apply to sensitive input:
-
-```bash
-api-cli run module/grantora1/create-secret --data '{"application_instance_id":"<application-id>","owner_type":"user","owner_id":"<user-id>","secret_type":"bearer_token","secret_value":"<token>"}'
-api-cli run module/grantora1/rotate-secret --data '{"secret_id":"<secret-id>","secret_value":"<new-token>"}'
-```
-
-Useful service checks on the module instance:
-
-```bash
-systemctl --user status grantora.service
-systemctl --user status grantora-postgres.service
-systemctl --user status grantora-apisix-etcd.service
-systemctl --user status grantora-api.service
-systemctl --user status grantora-apisix.service
-podman pod port grantora
-```
-
-Run the module smoke and security checks after configure, restore, or upgrade:
-
-```bash
-api-cli run module/grantora1/run-smoke
-```
-
-## Operations
-
-`get-status` returns the main operator diagnostics without opening a container shell:
+Inspect status without opening a shell in the containers:
 
 ```bash
 api-cli run module/grantora1/get-status
+systemctl --user status grantora.service
+systemctl --user status grantora-api.service
+podman pod port grantora
 ```
 
-It includes pod state, per-unit state, per-container state and image metadata, `/healthz`, `/readyz`, APISIX sync, user sync status and last sync error, private metrics probe status, log source metadata, and the latest retention result.
-
-Service logs are emitted to the standard systemd user journal. The Grantora API container receives `GRANTORA_JSON_LOGS=true` in production, so application logs are structured JSON. Use the unit names reported by `get-status.logs.sources`:
-
-```bash
-journalctl --user-unit=grantora-api.service --no-pager --lines=200
-journalctl --user-unit=grantora-apisix.service --no-pager --lines=200
-```
-
-When running inside the module instance environment, use the redacting helper for allowlisted units:
+Read redacted logs and private metrics:
 
 ```bash
 grantora-operations logs grantora-api.service --lines 200
-```
-
-Metrics remain private. Do not expose `/metrics` through Traefik. For one-shot collection from inside the module instance environment:
-
-```bash
+grantora-operations logs grantora-apisix.service --lines 200
 grantora-pod-exec metrics
 ```
 
-If an NS8 or Prometheus collector is added later, it must scrape from the module context or pod-local helper path, not from a public route. `get-status.metrics` reports whether metrics are enabled and whether the pod-local probe succeeds.
-
-Retention uses the upstream Grantora retention command inside `grantora-api`. Dry-run first, then apply explicitly:
+Run retention safely:
 
 ```bash
 api-cli run module/grantora1/run-retention --data '{"dry_run":true}'
@@ -145,43 +222,216 @@ api-cli run module/grantora1/run-retention --data '{"dry_run":false}'
 systemctl --user status grantora-retention.timer
 ```
 
-The timer runs the apply path periodically using `AUDIT_RETENTION_DAYS` and `USAGE_RETENTION_DAYS` from generated state. The latest result is stored in `state/retention.json` and surfaced by `get-status.retention.last_run`.
-
-Troubleshooting commands for common failures:
+Run smoke checks after configure, restore, or upgrade:
 
 ```bash
-# Invalid admin bootstrap hash or APISIX Admin API credential mismatch
-grantora-admin GET /v1/admin/apisix/status
-grantora-operations logs grantora-api.service --lines 200
+api-cli run module/grantora1/run-smoke
+```
 
-# Missing or wrong encryption key, usually visible as readiness or secret-resolution errors
+## Backup, Restore, And Upgrade
+
+### Backup and restore order
+
+`backup-module` and `restore-module` are the supported NS8 lifecycle actions. The restore flow is intentionally ordered to keep Admin, database, and APISIX control surfaces private throughout recovery.
+
+Restore sequence:
+
+1. Restore generated env files and module secrets first.
+2. Start `grantora-pod.service`.
+3. Start `grantora-postgres.service`.
+4. Restore the PostgreSQL dump through the private pod helper.
+5. Start `grantora-apisix-etcd.service` and `grantora-api.service`.
+6. Wait for `/readyz` through the private helper.
+7. Start `grantora-apisix.service`.
+8. Run APISIX sync through `grantora-admin`.
+9. Run `run-smoke`.
+
+Operator commands:
+
+```bash
+api-cli run module/grantora1/backup-module
+api-cli run module/grantora1/restore-module
+```
+
+### Upgrade procedure
+
+Upgrade the upstream Grantora API image with `upgrade-module`. Use immutable image tags and explicit versions. The action can optionally pull the image and roll back on failure.
+
+```bash
+api-cli run module/grantora1/upgrade-module --data '{
+	"grantora_version": "0.1.1",
+	"grantora_image": "ghcr.io/grantora/grantora-api",
+	"pull": true,
+	"rollback_on_failure": true
+}'
+```
+
+Upgrade behavior:
+
+1. Record current version and runtime state.
+2. Back up PostgreSQL and preserve existing env secrets.
+3. Pull the requested image when `pull=true`.
+4. Restart the Grantora API container with the new image.
+5. Run upstream migrations when the image provides them.
+6. Wait for `/readyz`.
+7. Reconcile APISIX.
+8. Run smoke checks.
+9. Preserve the pre-upgrade backup if the upgrade fails.
+
+Do not use mutable `latest`-style runtime tags for production upgrades.
+
+## Provider Setup Examples
+
+Start by listing the built-in templates:
+
+```bash
+api-cli run module/grantora1/list-capability-templates --data '{}'
+```
+
+### Mock or demo capability
+
+This is the quickest end-to-end validation path.
+
+```bash
+api-cli run module/grantora1/bootstrap-workspace --data '{}'
+api-cli run module/grantora1/create-application --data '{"workspace_id":"<workspace-id>","slug":"mock-phonebook","display_name":"Mock Phonebook","provider_type":"mock","base_url":"https://mock.example.test"}'
+api-cli run module/grantora1/create-user --data '{"workspace_id":"<workspace-id>","external_id":"alice","display_name":"Alice"}'
+api-cli run module/grantora1/create-capability-from-template --data '{"workspace_id":"<workspace-id>","template_id":"mock.phonebook.search","application_instance_id":"<application-id>","id":"mock.phonebook.search.demo","name":"Mock phonebook search"}'
+api-cli run module/grantora1/create-agent --data '{"workspace_id":"<workspace-id>","slug":"demo-agent","display_name":"Demo Agent","store_token":false}'
+api-cli run module/grantora1/create-binding --data '{"workspace_id":"<workspace-id>","agent_id":"<agent-id>","user_id":"<user-id>","capability_id":"mock.phonebook.search.demo","role_id":"<read-only-role-id>"}'
+```
+
+Then invoke the runtime path with the one-time agent token returned by `create-agent`:
+
+```bash
+curl -sS -X POST https://grantora.example.org/v1/invoke/mock.phonebook.search.demo \
+	-H 'Authorization: Bearer <agent-token>' \
+	-H 'Content-Type: application/json' \
+	-d '{"user":"alice","input":{"query":"Mario","limit":5}}'
+```
+
+### NethVoice phonebook search
+
+Use the built-in `nethvoice.phonebook.search` template with a delegated read-only credential.
+
+```bash
+api-cli run module/grantora1/create-application --data '{"workspace_id":"<workspace-id>","slug":"nethvoice","display_name":"NethVoice","provider_type":"nethvoice","base_url":"https://pbx.example.org"}'
+api-cli run module/grantora1/create-capability-from-template --data '{"workspace_id":"<workspace-id>","template_id":"nethvoice.phonebook.search","application_instance_id":"<application-id>","id":"nethvoice.phonebook.search.office","name":"NethVoice phonebook search"}'
+api-cli run module/grantora1/create-secret --data '{"workspace_id":"<workspace-id>","application_instance_id":"<application-id>","owner_type":"workspace","owner_id":"<workspace-id>","secret_type":"bearer_token","secret_value":"<delegated-nethvoice-token>"}'
+```
+
+Use a token with phonebook read access only. Store it as a Grantora secret, not in the agent definition, binding, prompt, or capability input.
+
+### Nextcloud files search
+
+Use the built-in `nextcloud.files.search` template with a delegated app password or supported bearer token.
+
+```bash
+api-cli run module/grantora1/create-application --data '{"workspace_id":"<workspace-id>","slug":"nextcloud","display_name":"Nextcloud","provider_type":"nextcloud","base_url":"https://cloud.example.org"}'
+api-cli run module/grantora1/create-capability-from-template --data '{"workspace_id":"<workspace-id>","template_id":"nextcloud.files.search","application_instance_id":"<application-id>","id":"nextcloud.files.search.docs","name":"Nextcloud files search"}'
+api-cli run module/grantora1/create-secret --data '{"workspace_id":"<workspace-id>","application_instance_id":"<application-id>","owner_type":"workspace","owner_id":"<workspace-id>","secret_type":"basic_auth","secret_value":"alice:app-password"}'
+```
+
+Use a delegated credential with file read and search access only. For workspace-scoped provider credentials, `owner_type=workspace` requires `owner_id` to match the workspace id.
+
+## Safe Secret Handling
+
+Provider secrets and agent tokens are different things.
+
+- Upstream provider secrets belong in Grantora secret records created through `create-secret` or the `Applications` UI page.
+- Agent bearer tokens are generated only by `create-agent` and `rotate-agent-token`.
+- Exactly one of `secret_value` or `external_reference` must be provided when creating or rotating a secret.
+- `secret_value` is redacted by NS8 task handling because the input key contains `secret`.
+- Use `external_reference` when you have an external secret store integration and do not want the secret payload stored inside Grantora.
+- Prefer workspace-scoped secrets for shared provider credentials and user-scoped secrets for per-user delegated credentials.
+- Never paste upstream provider secrets into agent prompts, bindings, capability ids, or runtime API calls.
+
+Rotate a stored provider secret with:
+
+```bash
+api-cli run module/grantora1/rotate-secret --data '{"secret_id":"<secret-id>","secret_value":"<new-secret-value>"}'
+```
+
+## Agent Integration
+
+The agent runtime bearer token returned by `create-agent` or `rotate-agent-token` is the only credential an external agent needs for public runtime access.
+
+Available runtime discovery surfaces:
+
+- `GET /v1/openapi.json` returns the static runtime API contract.
+- `GET /v1/capabilities/openapi.json?user=<external_id>` returns a filtered OpenAPI document for the selected user.
+- `GET /v1/mcp/tools?user=<external_id>` returns an MCP-compatible tool list for the selected user.
+- `POST /v1/mcp/call` executes a tool call mapped back to the same runtime capability executor.
+
+Filtered OpenAPI and MCP tools are generated from the same allowed capability set. An agent only sees capabilities it is allowed to describe and invoke for the selected user.
+
+Example with the demo agent token:
+
+```bash
+curl -sS 'https://grantora.example.org/v1/mcp/tools?user=alice' \
+	-H 'Authorization: Bearer <agent-token>'
+
+curl -sS -X POST https://grantora.example.org/v1/mcp/call \
+	-H 'Authorization: Bearer <agent-token>' \
+	-H 'Content-Type: application/json' \
+	-d '{"user":"alice","name":"mock_phonebook_search","arguments":{"query":"Mario","limit":5}}'
+
+curl -sS 'https://grantora.example.org/v1/capabilities/openapi.json?user=alice' \
+	-H 'Authorization: Bearer <agent-token>'
+```
+
+Agents should never call `/v1/admin/*`, `/healthz`, `/readyz`, `/metrics`, the APISIX Admin API, PostgreSQL, or etcd. Those are operator-only private surfaces.
+
+## Troubleshooting
+
+Common operator commands:
+
+```bash
+# Global status
 api-cli run module/grantora1/get-status
-grantora-operations logs grantora-api.service --lines 200
 
-# APISIX sync failure
+# APISIX sync state
+grantora-admin GET /v1/admin/apisix/status
 grantora-admin POST /v1/admin/apisix/sync
-grantora-operations logs grantora-apisix.service --lines 200
 
-# PostgreSQL readiness failure
+# PostgreSQL readiness
 systemctl --user status grantora-postgres.service
 grantora-pod-exec exec grantora-postgres pg_isready -U grantora -d grantora
 
-# User-domain sync failure
+# User sync failures
 api-cli run module/grantora1/sync-users
 grantora-users status
 grantora-operations logs grantora-user-sync.service --lines 200
 
-# Pod or container unit failure
-systemctl --user status grantora.service
-podman pod port grantora
-podman ps --pod --filter name=grantora
+# Runtime/API failures
+grantora-operations logs grantora-api.service --lines 200
+grantora-operations logs grantora-apisix.service --lines 200
 ```
+
+## Unsupported Features And Future Work
+
+The current module intentionally does not provide or expose the following:
+
+- No public Grantora Admin API route.
+- No public APISIX Admin API, PostgreSQL, or etcd exposure.
+- No public metrics endpoint.
+- No default host-mapped admin port.
+- No encryption-key rotation until upstream re-encryption support exists.
+- No token-pepper rotation until upstream token migration support exists.
+- No operator OIDC or trusted-proxy admin identity enabled by default.
+
+Upstream work still matters for production readiness:
+
+- Versioned production database migrations are still required upstream.
+- Immutable upstream release images should be used for production module releases.
+- A bulk and idempotent upstream user sync API would simplify large-domain imports.
+- Software Center metadata publication may lag behind image publication.
 
 ## Tests
 
 This repository uses the NS8 testing infrastructure. For local execution guidance, refer to the [ns8-github-actions test README](https://github.com/NethServer/ns8-github-actions/blob/v1/README.md#running-tests-locally).
 
-Local static/unit gates:
+Local static and packaging gates:
 
 ```bash
 python3 tests/action_contracts.py
@@ -190,7 +440,7 @@ python3 tests/security_static.py
 NODE_OPTIONS=--openssl-legacy-provider corepack yarn --cwd ui build
 ```
 
-The Robot suite in [tests/grantora.robot](tests/grantora.robot) covers install, configure, status, public route, private-surface denials, pod port exposure, optional user sync, demo capability creation and invocation, backup, restore, same-image upgrade smoke, authorization denials, and destroy. It is run by the NS8 module test workflow against a real test node.
+The Robot suite in [tests/grantora.robot](tests/grantora.robot) covers install, configure, status, public runtime route, private-surface denials, user sync, demo capability creation and invocation, backup, restore, same-version upgrade smoke, authorization denials, and destroy against a real NS8 test node.
 
 ## Uninstall
 

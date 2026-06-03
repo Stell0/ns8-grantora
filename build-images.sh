@@ -10,6 +10,12 @@ set -e
 
 # Prepare variables for later use
 images=()
+runtime_images=(
+    "ghcr.io/stell0/grantora-api:0.1.0"
+    "docker.io/library/postgres:16-alpine"
+    "docker.io/bitnamilegacy/etcd:3.5"
+    "docker.io/apache/apisix:3.10.0-debian"
+)
 # The image will be pushed to GitHub container registry
 repobase="${REPOBASE:-ghcr.io/nethserver}"
 # Configure the image name
@@ -39,6 +45,7 @@ buildah config --entrypoint=/ \
     --label="org.nethserver.authorizations=cluster:accountconsumer,traefik@node:routeadm" \
     --label="org.nethserver.tcp-ports-demand=1" \
     --label="org.nethserver.rootfull=0" \
+    --label="org.nethserver.images=${runtime_images[*]}" \
     --label="org.opencontainers.image.title=ns8-grantora" \
     --label="org.opencontainers.image.description=Grantora Agent Capability Gateway module for NethServer 8" \
     "${container}"
