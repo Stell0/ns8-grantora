@@ -59,7 +59,14 @@ jobs:
             done
           )
           if (( ${#python_files[@]} )); then
-            python -m py_compile "${python_files[@]}"
+            python - "${python_files[@]}" <<'PY'
+          import sys
+          from pathlib import Path
+
+          for filename in sys.argv[1:]:
+              path = Path(filename)
+              compile(path.read_text(encoding="utf-8"), filename, "exec")
+          PY
             for file in "${python_files[@]}"; do
               ruff check --stdin-filename "$file" < "$file"
             done
@@ -70,5 +77,25 @@ jobs:
           find imageroot/actions -name 'validate-*.json' -print0 |
             xargs -0 -n1 jq -e . >/dev/null
 
+      - name: Run action contract checks
+        run: python tests/action_contracts.py
+
+      - name: Run systemd and lifecycle contract checks
+        run: python tests/systemd_contracts.py
+
       - name: Run static security checks
         run: python tests/security_static.py
+
+  build-module-image:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Buildah
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y buildah
+
+      - name: Build module image
+        run: ./build-images.sh

@@ -181,6 +181,17 @@ podman ps --pod --filter name=grantora
 
 This repository uses the NS8 testing infrastructure. For local execution guidance, refer to the [ns8-github-actions test README](https://github.com/NethServer/ns8-github-actions/blob/v1/README.md#running-tests-locally).
 
+Local static/unit gates:
+
+```bash
+python3 tests/action_contracts.py
+python3 tests/systemd_contracts.py
+python3 tests/security_static.py
+NODE_OPTIONS=--openssl-legacy-provider corepack yarn --cwd ui build
+```
+
+The Robot suite in [tests/grantora.robot](tests/grantora.robot) covers install, configure, status, public route, private-surface denials, pod port exposure, optional user sync, demo capability creation and invocation, backup, restore, same-image upgrade smoke, authorization denials, and destroy. It is run by the NS8 module test workflow against a real test node.
+
 ## Uninstall
 
 ```bash

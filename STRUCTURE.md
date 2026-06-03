@@ -9,7 +9,7 @@ Current repository map for `ns8-grantora` during the pod-based runtime packaging
 - `PLAN.md`: milestone roadmap and target runtime topology.
 - `build-images.sh`: module image build and NS8 image labels.
 - `imageroot/`: NS8 module payload copied into the installed environment.
-- `tests/`: Robot lifecycle coverage for the current milestone.
+- `tests/`: standalone contract/security checks plus Robot lifecycle coverage for the current milestone.
 - `ui/`: cluster-admin module UI and metadata.
 - `.github/`: CI workflows for linting, image publication, and module tests.
 
@@ -50,6 +50,13 @@ Current repository map for `ns8-grantora` during the pod-based runtime packaging
 - `systemd/user/grantora-apisix.service`: APISIX runtime/data-plane container in the pod.
 - `systemd/user/grantora-user-sync.timer` and `grantora-user-sync.service`: periodic LDAP user sync.
 - `systemd/user/grantora-retention.timer` and `grantora-retention.service`: periodic audit/usage retention through the upstream CLI.
+
+## `tests/`
+
+- `action_contracts.py`: standalone action-schema, env rendering, secret idempotency, admin hash, domain parsing and safe-error checks.
+- `systemd_contracts.py`: standalone pod topology, lifecycle helper and CI gate checks.
+- `security_static.py`: standalone redaction, exposure-boundary and secret-handling checks.
+- `grantora.robot`: NS8 lifecycle, security, backup/restore, upgrade-smoke and authorization-denial Robot suite.
 
 ## Target expansion
 

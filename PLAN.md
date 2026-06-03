@@ -779,53 +779,53 @@ Objective: prove lifecycle, pod topology, security and restore behavior before r
 
 Tests:
 
-- [ ] Action unit tests:
-  - [ ] JSON schema validation;
-  - [ ] env rendering;
-  - [ ] secret generation idempotency;
-  - [ ] admin hash generation;
-  - [ ] domain discovery parsing;
-  - [ ] safe error formatting.
-- [ ] Systemd/pod tests:
-  - [ ] `grantora-pod.service` creates one pod;
-  - [ ] helper services join the same pod;
-  - [ ] only APISIX runtime port is published;
-  - [ ] container units restart independently where safe.
-- [ ] Robot lifecycle tests:
-  - [ ] install module;
-  - [ ] configure with selected user domain;
-  - [ ] verify Traefik runtime route;
-  - [ ] verify direct Grantora API route is not public;
-  - [ ] verify APISIX Admin API is not public;
-  - [ ] verify PostgreSQL and etcd are not public;
-  - [ ] run user sync;
-  - [ ] create demo capability flow;
-  - [ ] invoke runtime endpoint through APISIX;
-  - [ ] backup;
-  - [ ] restore;
-  - [ ] invoke again;
-  - [ ] destroy module.
+- [x] Action unit tests:
+  - [x] JSON schema validation;
+  - [x] env rendering;
+  - [x] secret generation idempotency;
+  - [x] admin hash generation;
+  - [x] domain discovery parsing;
+  - [x] safe error formatting.
+- [x] Systemd/pod tests:
+  - [x] `grantora-pod.service` creates one pod;
+  - [x] helper services join the same pod;
+  - [x] only APISIX runtime port is published;
+  - [x] container units restart independently where safe.
+- [x] Robot lifecycle tests:
+  - [x] install module;
+  - [x] configure with selected user domain;
+  - [x] verify Traefik runtime route;
+  - [x] verify direct Grantora API route is not public;
+  - [x] verify APISIX Admin API is not public;
+  - [x] verify PostgreSQL and etcd are not public;
+  - [x] run user sync;
+  - [x] create demo capability flow;
+  - [x] invoke runtime endpoint through APISIX;
+  - [x] backup;
+  - [x] restore;
+  - [x] invoke again;
+  - [x] destroy module.
 - [ ] Upgrade tests:
   - [ ] start previous released module;
-  - [ ] seed state;
-  - [ ] upgrade;
-  - [ ] verify state and route.
-- [ ] Security tests:
-  - [ ] no secret in action output;
-  - [ ] no secret in logs;
-  - [ ] no public admin endpoints;
-  - [ ] no direct PostgreSQL/APISIX Admin/etcd exposure;
-  - [ ] no default host admin port;
-  - [ ] disabled agent denied;
-  - [ ] no binding denied;
-  - [ ] agent cannot act for another user.
-- [ ] CI workflows:
-  - [ ] markdown/lint;
-  - [ ] shellcheck or equivalent;
-  - [ ] action unit tests;
-  - [ ] build module image;
-  - [ ] Robot tests using NS8 test infrastructure;
-  - [ ] optional manual full e2e/backup-restore gate.
+  - [x] seed state;
+  - [x] upgrade;
+  - [x] verify state and route.
+- [x] Security tests:
+  - [x] no secret in action output;
+  - [x] no secret in logs;
+  - [x] no public admin endpoints;
+  - [x] no direct PostgreSQL/APISIX Admin/etcd exposure;
+  - [x] no default host admin port;
+  - [x] disabled agent denied;
+  - [x] no binding denied;
+  - [x] agent cannot act for another user.
+- [x] CI workflows:
+  - [x] markdown/lint;
+  - [x] shellcheck or equivalent;
+  - [x] action unit tests;
+  - [x] build module image;
+  - [x] Robot tests using NS8 test infrastructure;
+  - [x] optional manual full e2e/backup-restore gate.
 
 Acceptance:
 
