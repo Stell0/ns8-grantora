@@ -45,6 +45,8 @@ DEFAULT_ENV = {
     "SYNC_REACTIVATE_USERS": "true",
 }
 
+RESERVED_TCP_PORTS = {8080, 9180, 5432, 2379}
+
 INPUT_TO_ENV = {
     "grantora_image": "GRANTORA_IMAGE",
     "grantora_version": "GRANTORA_VERSION",
@@ -130,6 +132,10 @@ def load_runtime_env() -> dict[str, str]:
 
 def configure() -> None:
     config = json.load(sys.stdin)
+    if "tcp_port" in config and int(config["tcp_port"]) in RESERVED_TCP_PORTS:
+        reserved = ", ".join(str(port) for port in sorted(RESERVED_TCP_PORTS))
+        print(f"tcp_port is reserved for private pod-local services: {reserved}", file=sys.stderr)
+        sys.exit(2)
     env = load_runtime_env()
     for input_name, env_name in INPUT_TO_ENV.items():
         if input_name in config and config[input_name] is not None:

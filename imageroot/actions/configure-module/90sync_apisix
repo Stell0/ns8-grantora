@@ -3,22 +3,41 @@
 import subprocess
 import sys
 import time
+import re
 from pathlib import Path
 
 helper = Path(__file__).resolve().parents[2] / "bin" / "grantora-admin"
-last_error = ""
+REDACT_PATTERNS = (
+    re.compile(r"(Bearer\s+)[A-Za-z0-9._~+/=-]+", re.IGNORECASE),
+    re.compile(r'("[^"\\]*(?:token|password|secret|key)[^"\\]*"\s*:\s*")([^"\\]*)', re.IGNORECASE),
+    re.compile(r"\b([A-Z0-9_]*(?:TOKEN|PASSWORD|SECRET|KEY)[A-Z0-9_]*=)([^\s]+)", re.IGNORECASE),
+)
 
-for _attempt in range(12):
-    result = subprocess.run(
-        [helper, "POST", "/v1/admin/apisix/sync"],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode == 0:
-        sys.exit(0)
-    last_error = result.stderr.strip() or result.stdout.strip()
-    time.sleep(5)
 
-print(last_error or "APISIX sync failed", file=sys.stderr)
-sys.exit(1)
+def redact(value: str) -> str:
+    redacted = value
+    for pattern in REDACT_PATTERNS:
+        redacted = pattern.sub(lambda match: f"{match.group(1)}<redacted>", redacted)
+    return redacted
+
+
+def main() -> None:
+    last_error = ""
+    for _attempt in range(12):
+        result = subprocess.run(
+            [helper, "POST", "/v1/admin/apisix/sync"],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            sys.exit(0)
+        last_error = redact(result.stderr.strip() or result.stdout.strip())
+        time.sleep(5)
+
+    print(last_error or "APISIX sync failed", file=sys.stderr)
+    sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

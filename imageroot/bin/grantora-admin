@@ -3,12 +3,18 @@
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 
 STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", Path.home() / ".local/state")) / "state"
+REDACT_PATTERNS = (
+    re.compile(r"(Bearer\s+)[A-Za-z0-9._~+/=-]+", re.IGNORECASE),
+    re.compile(r'("[^"\\]*(?:token|password|secret|key)[^"\\]*"\s*:\s*")([^"\\]*)', re.IGNORECASE),
+    re.compile(r"\b([A-Z0-9_]*(?:TOKEN|PASSWORD|SECRET|KEY)[A-Z0-9_]*=)([^\s]+)", re.IGNORECASE),
+)
 
 
 def parse_envfile(path: Path) -> dict[str, str]:
@@ -35,6 +41,13 @@ def payload_from_args(args: argparse.Namespace) -> object | None:
     elif raw_payload.startswith("@"):
         raw_payload = Path(raw_payload[1:]).read_text(encoding="utf-8")
     return json.loads(raw_payload)
+
+
+def redact(value: str) -> str:
+    redacted = value
+    for pattern in REDACT_PATTERNS:
+        redacted = pattern.sub(lambda match: f"{match.group(1)}<redacted>", redacted)
+    return redacted
 
 
 def main() -> None:
@@ -83,12 +96,19 @@ except urllib.error.HTTPError as exc:
     sys.stderr.buffer.write(exc.read())
     sys.exit(exc.code if exc.code < 128 else 1)
 '''
-    subprocess.run(
+    result = subprocess.run(
         ["podman", "exec", "-i", "grantora-api", "python", "-c", script],
         input=json.dumps(request),
         text=True,
-        check=True,
+        capture_output=True,
+        check=False,
     )
+    if result.stdout:
+        sys.stdout.write(result.stdout)
+    if result.stderr:
+        sys.stderr.write(redact(result.stderr))
+    if result.returncode != 0:
+        sys.exit(result.returncode)
 
 
 if __name__ == "__main__":

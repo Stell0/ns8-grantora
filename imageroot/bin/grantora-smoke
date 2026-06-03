@@ -2,6 +2,8 @@
 
 import json
 import os
+import re
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -10,6 +12,13 @@ from pathlib import Path
 BIN_DIR = Path(__file__).resolve().parent
 ADMIN_HELPER = BIN_DIR / "grantora-admin"
 STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", Path.home() / ".local/state")) / "state"
+FORBIDDEN_RUNTIME_PATHS = ("/v1/admin/apisix/status", "/healthz", "/readyz", "/metrics")
+OWNER_READ_WRITE = stat.S_IRUSR | stat.S_IWUSR
+REDACT_PATTERNS = (
+    re.compile(r"(Bearer\s+)[A-Za-z0-9._~+/=-]+", re.IGNORECASE),
+    re.compile(r'("[^"\\]*(?:token|password|secret|key)[^"\\]*"\s*:\s*")([^"\\]*)', re.IGNORECASE),
+    re.compile(r"\b([A-Z0-9_]*(?:TOKEN|PASSWORD|SECRET|KEY)[A-Z0-9_]*=)([^\s]+)", re.IGNORECASE),
+)
 
 
 def command(args: list[str], timeout: int = 15) -> subprocess.CompletedProcess[str]:
@@ -19,6 +28,17 @@ def command(args: list[str], timeout: int = 15) -> subprocess.CompletedProcess[s
         return subprocess.CompletedProcess(args, 127, "", str(exc))
     except subprocess.TimeoutExpired as exc:
         return subprocess.CompletedProcess(args, 124, exc.stdout or "", exc.stderr or "timeout")
+
+
+def redact(value: str) -> str:
+    redacted = value
+    for pattern in REDACT_PATTERNS:
+        redacted = pattern.sub(lambda match: f"{match.group(1)}<redacted>", redacted)
+    return redacted
+
+
+def command_error(result: subprocess.CompletedProcess[str], fallback: str) -> str:
+    return redact(result.stderr.strip() or result.stdout.strip() or fallback)
 
 
 def api_get(path: str) -> dict[str, object]:
@@ -42,13 +62,13 @@ except Exception as exc:
     result = command(["podman", "exec", "grantora-api", "python", "-c", script])
     if result.returncode == 0 and result.stdout:
         return json.loads(result.stdout)
-    return {"ok": False, "error": result.stderr.strip() or "not_available"}
+    return {"ok": False, "error": command_error(result, "not_available")}
 
 
 def admin_call(method: str, path: str) -> dict[str, object]:
     result = command([str(ADMIN_HELPER), method, path], timeout=30)
     if result.returncode != 0:
-        return {"ok": False, "error": result.stderr.strip() or result.stdout.strip() or "not_available"}
+        return {"ok": False, "error": command_error(result, "not_available")}
     try:
         body = json.loads(result.stdout or "{}")
     except json.JSONDecodeError:
@@ -68,12 +88,72 @@ def runtime_probe(path: str) -> dict[str, object]:
         ]
     )
     if result.returncode != 0:
-        return {"ok": False, "error": result.stderr.strip() or "not_available"}
+        return {"ok": False, "error": command_error(result, "not_available")}
     try:
         status_code = int(result.stdout.strip())
     except ValueError:
         return {"ok": False, "error": "invalid_status_code"}
     return {"ok": status_code in {200, 401, 403}, "status_code": status_code}
+
+
+def runtime_path_not_exposed(path: str) -> dict[str, object]:
+    result = command(
+        [
+            "podman",
+            "exec",
+            "grantora-apisix",
+            "sh",
+            "-ec",
+            f"curl -sS -o /dev/null -w '%{{http_code}}' --max-time 5 http://127.0.0.1:9080{path}",
+        ]
+    )
+    if result.returncode != 0:
+        return {"ok": False, "error": command_error(result, "not_available")}
+    try:
+        status_code = int(result.stdout.strip())
+    except ValueError:
+        return {"ok": False, "error": "invalid_status_code"}
+    return {"ok": status_code < 200 or status_code >= 300, "status_code": status_code}
+
+
+def runtime_private_paths() -> dict[str, object]:
+    paths = {path: runtime_path_not_exposed(path) for path in FORBIDDEN_RUNTIME_PATHS}
+    return {"ok": all(result.get("ok") for result in paths.values()), "paths": paths}
+
+
+def pod_port_exposure() -> dict[str, object]:
+    result = command(["podman", "pod", "port", "grantora"])
+    if result.returncode != 0:
+        return {"ok": False, "error": command_error(result, "pod_ports_unavailable")}
+    lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    expected = re.compile(r"^9080/tcp -> 127\.0\.0\.1:\d+$")
+    unexpected = [line for line in lines if not expected.fullmatch(line)]
+    return {"ok": bool(lines) and not unexpected, "ports": lines, "unexpected": unexpected}
+
+
+def secret_file_modes() -> dict[str, object]:
+    paths = [
+        STATE_DIR / "secrets.env",
+        STATE_DIR / "postgres.env",
+        STATE_DIR / "apisix-config.yaml",
+        *(STATE_DIR / "agent-tokens").glob("*.env"),
+    ]
+    files: dict[str, object] = {}
+    for path in paths:
+        if not path.exists():
+            continue
+        mode = stat.S_IMODE(path.stat().st_mode)
+        files[str(path.relative_to(STATE_DIR))] = {"ok": mode == OWNER_READ_WRITE, "mode": oct(mode)}
+    return {"ok": all(file["ok"] for file in files.values()), "files": files}
+
+
+def security_checks() -> dict[str, object]:
+    checks = {
+        "runtime_private_paths": runtime_private_paths(),
+        "pod_port_exposure": pod_port_exposure(),
+        "secret_file_modes": secret_file_modes(),
+    }
+    return {"ok": all(check.get("ok") for check in checks.values()), "checks": checks}
 
 
 def optional_runtime_discovery() -> dict[str, object]:
@@ -106,7 +186,7 @@ def optional_runtime_discovery() -> dict[str, object]:
         except ValueError:
             return {"ok": False, "error": "invalid_status_code"}
         return {"ok": status_code == 200, "status_code": status_code}
-    return {"ok": False, "error": result.stderr.strip() or "runtime_discovery_failed"}
+    return {"ok": False, "error": command_error(result, "runtime_discovery_failed")}
 
 
 def parse_envfile(path: Path) -> dict[str, str]:
@@ -130,6 +210,7 @@ def main() -> None:
         "apisix_status": admin_call("GET", "/v1/admin/apisix/status"),
         "runtime_discovery": optional_runtime_discovery(),
         "runtime_route_probe": runtime_probe("/v1/me"),
+        "security": security_checks(),
     }
     ok = all(check.get("ok") for check in checks.values())
     json.dump({"ok": ok, "checks": checks}, sys.stdout)

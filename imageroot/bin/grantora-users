@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -12,6 +13,11 @@ from urllib.parse import urlencode
 
 STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", Path.home() / ".local/state")) / "state"
 ADMIN_HELPER = Path(__file__).resolve().parent / "grantora-admin"
+REDACT_PATTERNS = (
+    re.compile(r"(Bearer\s+)[A-Za-z0-9._~+/=-]+", re.IGNORECASE),
+    re.compile(r'("[^"\\]*(?:token|password|secret|key)[^"\\]*"\s*:\s*")([^"\\]*)', re.IGNORECASE),
+    re.compile(r"\b([A-Z0-9_]*(?:TOKEN|PASSWORD|SECRET|KEY)[A-Z0-9_]*=)([^\s]+)", re.IGNORECASE),
+)
 
 
 def parse_envfile(path: Path) -> dict[str, str]:
@@ -39,6 +45,13 @@ def load_json(path: Path, default: object) -> object:
 def write_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, sort_keys=True), encoding="utf-8")
+
+
+def redact(value: str) -> str:
+    redacted = value
+    for pattern in REDACT_PATTERNS:
+        redacted = pattern.sub(lambda match: f"{match.group(1)}<redacted>", redacted)
+    return redacted
 
 
 def selected_domain() -> str:
@@ -129,7 +142,7 @@ def admin_api(method: str, path: str, data: dict[str, object] | None = None) -> 
     result = subprocess.run(args, text=True, capture_output=True, check=False)
     if result.returncode != 0:
         message = result.stderr.strip() or result.stdout.strip() or f"admin_api_failed:{result.returncode}"
-        raise RuntimeError(message)
+        raise RuntimeError(redact(message))
     if not result.stdout.strip():
         return {}
     return json.loads(result.stdout)

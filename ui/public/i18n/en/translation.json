@@ -155,6 +155,7 @@
     "provider_type": "Provider type",
     "display_name": "Display name",
     "base_url": "Base URL",
+    "invalid_base_url": "Use an absolute http or https URL. Grantora validates upstream origin safety before use.",
     "template": "Template",
     "choose_template": "Choose a template",
     "application": "Application",

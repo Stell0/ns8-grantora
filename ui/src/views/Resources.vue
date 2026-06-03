@@ -64,6 +64,8 @@
                 <cv-text-input
                   :label="$t('resources.base_url')"
                   v-model.trim="applicationForm.base_url"
+                  :invalid-message="error.applicationBaseUrl"
+                  ref="applicationBaseUrl"
                 ></cv-text-input>
               </cv-column>
             </cv-row>
@@ -755,6 +757,7 @@ export default {
         rotateSecret: "",
         applicationSlug: "",
         applicationProviderType: "",
+        applicationBaseUrl: "",
         templateId: "",
         capabilityApplicationId: "",
         bindingAgentId: "",
@@ -802,6 +805,23 @@ export default {
       }
       return true;
     },
+    validateApplicationBaseUrl() {
+      this.error.applicationBaseUrl = "";
+      if (!this.applicationForm.base_url) {
+        return true;
+      }
+      try {
+        const parsed = new URL(this.applicationForm.base_url);
+        if (!["http:", "https:"].includes(parsed.protocol) || !parsed.host) {
+          throw new Error("invalid application base URL");
+        }
+      } catch (error) {
+        this.error.applicationBaseUrl = this.$t("resources.invalid_base_url");
+        this.focusElement("applicationBaseUrl");
+        return false;
+      }
+      return true;
+    },
     async createApplication() {
       if (
         !this.requireField(
@@ -813,7 +833,8 @@ export default {
           "applicationProviderType",
           "applicationProviderType",
           this.applicationForm.provider_type
-        )
+        ) ||
+        !this.validateApplicationBaseUrl()
       ) {
         return;
       }

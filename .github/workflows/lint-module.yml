@@ -69,3 +69,6 @@ jobs:
         run: |
           find imageroot/actions -name 'validate-*.json' -print0 |
             xargs -0 -n1 jq -e . >/dev/null
+
+      - name: Run static security checks
+        run: python tests/security_static.py

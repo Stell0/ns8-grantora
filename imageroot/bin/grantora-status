@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -22,6 +23,11 @@ UNITS = [
     "grantora-user-sync.timer",
     "grantora-user-sync.service",
 ]
+REDACT_PATTERNS = (
+    re.compile(r"(Bearer\s+)[A-Za-z0-9._~+/=-]+", re.IGNORECASE),
+    re.compile(r'("[^"\\]*(?:token|password|secret|key)[^"\\]*"\s*:\s*")([^"\\]*)', re.IGNORECASE),
+    re.compile(r"\b([A-Z0-9_]*(?:TOKEN|PASSWORD|SECRET|KEY)[A-Z0-9_]*=)([^\s]+)", re.IGNORECASE),
+)
 
 
 def command(args: list[str], stdin: str | None = None) -> subprocess.CompletedProcess[str]:
@@ -38,6 +44,17 @@ def command(args: list[str], stdin: str | None = None) -> subprocess.CompletedPr
         return subprocess.CompletedProcess(args, 127, "", str(exc))
     except subprocess.TimeoutExpired as exc:
         return subprocess.CompletedProcess(args, 124, exc.stdout or "", exc.stderr or "timeout")
+
+
+def redact(value: str) -> str:
+    redacted = value
+    for pattern in REDACT_PATTERNS:
+        redacted = pattern.sub(lambda match: f"{match.group(1)}<redacted>", redacted)
+    return redacted
+
+
+def command_error(result: subprocess.CompletedProcess[str], fallback: str) -> str:
+    return redact(result.stderr.strip() or result.stdout.strip() or fallback)
 
 
 def load_json(path: Path) -> dict[str, object]:
@@ -101,7 +118,7 @@ except Exception as exc:
     result = command(["podman", "exec", "grantora-api", "python", "-c", script])
     if result.returncode == 0 and result.stdout:
         return json.loads(result.stdout)
-    return {"ok": False, "error": result.stderr.strip() or "not_available"}
+    return {"ok": False, "error": command_error(result, "not_available")}
 
 
 def admin_get(path: str) -> dict[str, object]:
@@ -109,7 +126,7 @@ def admin_get(path: str) -> dict[str, object]:
         return {"ok": False, "error": "not_configured"}
     result = command([ADMIN_HELPER, "GET", path])
     if result.returncode != 0:
-        return {"ok": False, "error": result.stderr.strip() or "not_available"}
+        return {"ok": False, "error": command_error(result, "not_available")}
     try:
         return {"ok": True, "body": json.loads(result.stdout or "{}")}
     except json.JSONDecodeError:
@@ -119,7 +136,7 @@ def admin_get(path: str) -> dict[str, object]:
 def user_sync_status() -> dict[str, object]:
     result = command([USERS_HELPER, "status"])
     if result.returncode != 0:
-        return {"error": result.stderr.strip() or "not_available"}
+        return {"error": command_error(result, "not_available")}
     try:
         return json.loads(result.stdout or "{}")
     except json.JSONDecodeError:
@@ -129,7 +146,7 @@ def user_sync_status() -> dict[str, object]:
 def bootstrap_status() -> dict[str, object]:
     result = command([BOOTSTRAP_HELPER, "status"])
     if result.returncode != 0:
-        return {"error": result.stderr.strip() or "not_available"}
+        return {"error": command_error(result, "not_available")}
     try:
         return json.loads(result.stdout or "{}")
     except json.JSONDecodeError:

@@ -8,7 +8,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 
 STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", Path.home() / ".local/state")) / "state"
@@ -127,6 +127,16 @@ def safe_admin_error(
         if code and message:
             return f"{detail} ({code}: {message})"
     return detail
+
+
+def safe_base_url(value: object) -> str:
+    if not value:
+        return ""
+    base_url = str(value).strip()
+    parsed = urlparse(base_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise BootstrapError("base_url must be an absolute http or https URL")
+    return base_url
 
 
 def query_string(values: dict[str, object | None]) -> str:
@@ -367,7 +377,7 @@ def create_application(payload: dict[str, object]) -> dict[str, object]:
     slug = required_str(payload, "slug")
     display_name = str(payload.get("display_name") or slug)
     provider_type = required_str(payload, "provider_type")
-    base_url = payload.get("base_url")
+    base_url = safe_base_url(payload.get("base_url"))
     applications = list_collection(
         "/v1/admin/applications",
         "applications",
@@ -383,7 +393,7 @@ def create_application(payload: dict[str, object]) -> dict[str, object]:
             "provider_type": provider_type,
         }
         if base_url:
-            request["base_url"] = str(base_url)
+            request["base_url"] = base_url
         application = admin_api("POST", "/v1/admin/applications", request)["application"]
         action = "created"
     require_active(application, "application", slug)

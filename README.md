@@ -14,6 +14,7 @@ Milestone 4 adds the first bootstrap/admin helper flow described in [PLAN.md](PL
 - Generated env files and module secrets are rendered under `state/`; secret-bearing files are written with mode `0600`.
 - `configure-module` configures a Traefik route from `https://<host>/` to `http://127.0.0.1:${TCP_PORT}`.
 - `grantora-admin` calls private Grantora Admin API endpoints from inside the pod, including APISIX reconciliation.
+- `run-smoke` verifies private runtime paths, loopback-only pod port publishing, and `0600` modes on secret-bearing state files.
 - `grantora-pod-exec` exposes safe pod-local health/status/Admin API calls with an allowlisted container exec fallback.
 - `bootstrap-workspace` creates or reuses the default workspace, seeds default runtime permissions/roles, lists built-in capability templates, and records ids in `state/bootstrap.json`.
 - Helper actions create applications, users, roles, capabilities from templates, agents, bindings, and secrets through pod-local Admin API calls.
@@ -50,6 +51,8 @@ api-cli run module/grantora1/configure-module --data '{"host":"grantora.example.
 ```
 
 The action starts `grantora.service`, which pulls and runs the configured upstream Grantora, PostgreSQL, APISIX etcd, and APISIX images. The only host port mapping is the loopback APISIX runtime port owned by `grantora-pod.service`; Grantora Admin API, APISIX Admin API, PostgreSQL, and etcd stay private inside the pod.
+
+The selected runtime port cannot be one of the pod-local service ports `2379`, `5432`, `8080`, or `9180`. Application upstream `base_url` values entered through actions or the UI must be absolute `http` or `https` URLs; upstream Grantora performs origin safety validation before adapters use those URLs.
 
 Query defaults and status:
 
@@ -93,6 +96,12 @@ systemctl --user status grantora-apisix-etcd.service
 systemctl --user status grantora-api.service
 systemctl --user status grantora-apisix.service
 podman pod port grantora
+```
+
+Run the module smoke and security checks after configure, restore, or upgrade:
+
+```bash
+api-cli run module/grantora1/run-smoke
 ```
 
 ## Roadmap

@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -16,10 +17,22 @@ ADMIN_HELPER = BIN_DIR / "grantora-admin"
 SMOKE_HELPER = BIN_DIR / "grantora-smoke"
 USERS_HELPER = BIN_DIR / "grantora-users"
 STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", Path.home() / ".local/state")) / "state"
+REDACT_PATTERNS = (
+    re.compile(r"(Bearer\s+)[A-Za-z0-9._~+/=-]+", re.IGNORECASE),
+    re.compile(r'("[^"\\]*(?:token|password|secret|key)[^"\\]*"\s*:\s*")([^"\\]*)', re.IGNORECASE),
+    re.compile(r"\b([A-Z0-9_]*(?:TOKEN|PASSWORD|SECRET|KEY)[A-Z0-9_]*=)([^\s]+)", re.IGNORECASE),
+)
 
 
 class RestoreError(RuntimeError):
     pass
+
+
+def redact(value: str) -> str:
+    redacted = value
+    for pattern in REDACT_PATTERNS:
+        redacted = pattern.sub(lambda match: f"{match.group(1)}<redacted>", redacted)
+    return redacted
 
 
 def run(
@@ -38,7 +51,7 @@ def run(
     )
     if check and result.returncode != 0 and not ignore_failure:
         detail = result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
-        raise RestoreError(f"command failed: {Path(str(args[0])).name}: {detail}")
+        raise RestoreError(f"command failed: {Path(str(args[0])).name}: {redact(detail)}")
     return result
 
 
@@ -81,7 +94,7 @@ def restore_route() -> bool:
 def bind_user_domain() -> dict[str, object]:
     result = run([USERS_HELPER, "bind"], timeout=60, check=False)
     if result.returncode != 0:
-        return {"bound": False, "error": result.stderr.strip() or "bind_failed"}
+        return {"bound": False, "error": redact(result.stderr.strip() or "bind_failed")}
     try:
         return json.loads(result.stdout or "{}")
     except json.JSONDecodeError:
@@ -94,7 +107,7 @@ def wait_command(args: list[str], label: str, attempts: int = 60, interval: floa
         result = run(args, timeout=15, check=False)
         if result.returncode == 0:
             return
-        last_error = result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
+        last_error = redact(result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}")
         time.sleep(interval)
     raise RestoreError(f"timed out waiting for {label}: {last_error}")
 
@@ -184,7 +197,7 @@ def main() -> None:
             sys.stdout,
         )
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
+        print(redact(str(exc)), file=sys.stderr)
         sys.exit(1)
 
 

@@ -43,8 +43,9 @@ UNSUPPORTED_ROTATIONS = {
     ),
 }
 REDACT_PATTERNS = (
-    re.compile(r"(token|password|secret|key)=([^\s]+)", re.IGNORECASE),
     re.compile(r"(Bearer\s+)[A-Za-z0-9._~+/=-]+", re.IGNORECASE),
+    re.compile(r'("[^"\\]*(?:token|password|secret|key)[^"\\]*"\s*:\s*")([^"\\]*)', re.IGNORECASE),
+    re.compile(r"\b([A-Z0-9_]*(?:TOKEN|PASSWORD|SECRET|KEY)[A-Z0-9_]*=)([^\s]+)", re.IGNORECASE),
 )
 
 

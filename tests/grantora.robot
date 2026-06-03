@@ -44,6 +44,24 @@ Check if grantora can be configured
     ...    return_rc=True  return_stdout=False
     Should Be Equal As Integers    ${rc}  0
 
+Check grantora security boundaries
+    ${output}  ${rc} =    Execute Command    api-cli run module/${module_id}/run-smoke
+    ...    return_rc=True
+    Should Be Equal As Integers    ${rc}  0
+    ${smoke} =    Evaluate    json.loads(r'''${output}''')    modules=json
+    Should Be True    ${smoke["checks"]["security"]["ok"]}
+    Should Be True    ${smoke["checks"]["security"]["checks"]["runtime_private_paths"]["ok"]}
+    Should Be True    ${smoke["checks"]["security"]["checks"]["pod_port_exposure"]["ok"]}
+    Should Be True    ${smoke["checks"]["security"]["checks"]["secret_file_modes"]["ok"]}
+    ${admin_status}  ${admin_rc} =    Execute Command    curl --resolve grantora.dom.test:443:127.0.0.1 --insecure --silent --output /dev/null --write-out '%{http_code}' --max-time 10 https://grantora.dom.test/v1/admin/apisix/status
+    ...    return_rc=True
+    Should Be Equal As Integers    ${admin_rc}  0
+    Should Not Match Regexp    ${admin_status}    ^2[0-9][0-9]$
+    ${metrics_status}  ${metrics_rc} =    Execute Command    curl --resolve grantora.dom.test:443:127.0.0.1 --insecure --silent --output /dev/null --write-out '%{http_code}' --max-time 10 https://grantora.dom.test/metrics
+    ...    return_rc=True
+    Should Be Equal As Integers    ${metrics_rc}  0
+    Should Not Match Regexp    ${metrics_status}    ^2[0-9][0-9]$
+
 Check if grantora is removed correctly
     ${rc} =    Execute Command    remove-module --no-preserve ${module_id}
     ...    return_rc=True  return_stdout=False

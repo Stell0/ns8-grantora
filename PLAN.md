@@ -697,23 +697,23 @@ Objective: verify that NS8 packaging preserves Grantora security boundaries.
 
 Tasks:
 
-- [ ] Verify no public route exposes:
-  - [ ] `/v1/admin/*`;
-  - [ ] `/healthz` unless intentionally allowed by future private route policy;
-  - [ ] `/readyz` unless intentionally allowed by future private route policy;
-  - [ ] `/metrics` unless exposed to an operator-only collector;
-  - [ ] Grantora API direct port;
-  - [ ] APISIX Admin API;
-  - [ ] PostgreSQL;
-  - [ ] etcd.
-- [ ] Ensure the pod publishes only `127.0.0.1:${TCP_PORT}:9080` by default.
-- [ ] Ensure generated files containing secrets are mode `0600`.
-- [ ] Scrub action errors before returning them to UI.
-- [ ] Disable shell tracing around secret operations.
-- [ ] Add log redaction tests for action scripts.
-- [ ] Add firewall/route/pod-port checks in Robot tests.
-- [ ] Add SSRF-sensitive base URL expectations to UI and docs: upstream application URLs are entered into Grantora and validated by upstream.
-- [ ] Keep OIDC/trusted-proxy admin identity disabled unless a future NS8-private proxy path is implemented.
+- [x] Verify no public route exposes:
+  - [x] `/v1/admin/*`;
+  - [x] `/healthz` unless intentionally allowed by future private route policy;
+  - [x] `/readyz` unless intentionally allowed by future private route policy;
+  - [x] `/metrics` unless exposed to an operator-only collector;
+  - [x] Grantora API direct port;
+  - [x] APISIX Admin API;
+  - [x] PostgreSQL;
+  - [x] etcd.
+- [x] Ensure the pod publishes only `127.0.0.1:${TCP_PORT}:9080` by default.
+- [x] Ensure generated files containing secrets are mode `0600`.
+- [x] Scrub action errors before returning them to UI.
+- [x] Disable shell tracing around secret operations.
+- [x] Add log redaction tests for action scripts.
+- [x] Add firewall/route/pod-port checks in Robot tests.
+- [x] Add SSRF-sensitive base URL expectations to UI and docs: upstream application URLs are entered into Grantora and validated by upstream.
+- [x] Keep OIDC/trusted-proxy admin identity disabled unless a future NS8-private proxy path is implemented.
 
 Acceptance:
 
