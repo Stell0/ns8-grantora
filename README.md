@@ -23,22 +23,8 @@ Build and publish the module image, or use a released module image tag:
 
 ```bash
 ./build-images.sh
-add-module ghcr.io/nethserver/grantora:<module-tag> 1
+add-module ghcr.io/stell0/grantora:<module-tag> 1
 ```
-
-The trailing `1` reserves the single TCP port requested by the module image. Prefer immutable module tags for releases.
-
-### Install from Software Center
-
-When repository metadata is published for this module, install it from NS8 Software Center instead of `add-module`:
-
-1. Open Software Center.
-2. Search for Grantora.
-3. Install the module on the target node.
-4. Confirm the single requested TCP port allocation.
-5. Open the module and continue in the `Settings` page.
-
-The Software Center install path still deploys the same rootless pod and only publishes the APISIX runtime port through the module-managed route.
 
 ## Topology And Exposure
 
