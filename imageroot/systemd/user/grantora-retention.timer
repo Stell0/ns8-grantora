@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Grantora audit and usage retention periodically
+
+[Timer]
+OnBootSec=30min
+OnUnitActiveSec=1d
+RandomizedDelaySec=30min
+Persistent=true
+Unit=grantora-retention.service
+
+[Install]
+WantedBy=timers.target

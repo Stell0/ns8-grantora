@@ -21,6 +21,7 @@ Current repository map for `ns8-grantora` during the pod-based runtime packaging
 - `actions/backup-module/`: creates the logical PostgreSQL backup dump used by NS8 backup/restore.
 - `actions/restore-module/`: restores generated env/secret state, PostgreSQL data, route/user-domain bindings, APISIX reconciliation and smoke checks without exposing private services.
 - `actions/run-smoke/`: executes pod-local health, readiness, APISIX sync and runtime route/discovery checks.
+- `actions/run-retention/`: dry-runs or applies upstream audit/usage retention through the private Grantora API container.
 - `actions/upgrade-module/`: performs a safe upstream Grantora image/version upgrade with pre-upgrade dump, status/image snapshots, APISIX sync, smoke checks and safe failure records.
 - `actions/rotate-module-secrets/`: rotates safe module-level secrets and refuses unsupported pepper/encryption-key rotation until upstream support exists.
 - `actions/sync-users/`: syncs the selected NS8 user domain into Grantora users through pod-local Admin API calls.
@@ -34,6 +35,7 @@ Current repository map for `ns8-grantora` during the pod-based runtime packaging
 - `bin/grantora-admin`: pod-local Grantora Admin API caller that reads admin bootstrap credentials from `state/secrets.env`.
 - `bin/grantora-bootstrap`: idempotent bootstrap/admin helper used by workspace, object, overview and agent lifecycle actions.
 - `bin/grantora-lifecycle`: safe upgrade and module-secret rotation helper used by lifecycle actions.
+- `bin/grantora-operations`: redacted operator helper for allowlisted journal logs, private metrics, and retention execution.
 - `bin/grantora-pg-dump` and `bin/grantora-pg-restore`: PostgreSQL custom-format dump/restore helpers executed through the private pod-local PostgreSQL container.
 - `bin/grantora-pod-exec`: safe pod-local health/status/API helper with allowlisted container exec fallback.
 - `bin/grantora-smoke`: pod-local smoke helper used by restore and the `run-smoke` action.
@@ -47,6 +49,7 @@ Current repository map for `ns8-grantora` during the pod-based runtime packaging
 - `systemd/user/grantora-api.service`: upstream Grantora API container in the pod.
 - `systemd/user/grantora-apisix.service`: APISIX runtime/data-plane container in the pod.
 - `systemd/user/grantora-user-sync.timer` and `grantora-user-sync.service`: periodic LDAP user sync.
+- `systemd/user/grantora-retention.timer` and `grantora-retention.service`: periodic audit/usage retention through the upstream CLI.
 
 ## Target expansion
 

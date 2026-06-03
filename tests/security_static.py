@@ -42,6 +42,7 @@ def test_redaction_helpers() -> None:
         "imageroot/actions/configure-module/90sync_apisix",
         "imageroot/bin/grantora-smoke",
         "imageroot/bin/grantora-status",
+        "imageroot/bin/grantora-operations",
         "imageroot/bin/grantora-users",
         "imageroot/actions/restore-module/20restore",
         "imageroot/bin/grantora-lifecycle",
@@ -68,8 +69,23 @@ def test_reserved_runtime_ports() -> None:
 def test_secret_modes_and_oidc_disabled() -> None:
     env_helper = read("imageroot/bin/grantora-env")
     assert "path.chmod(stat.S_IRUSR | stat.S_IWUSR)" in env_helper
+    assert '"GRANTORA_JSON_LOGS": "true"' in env_helper
     assert '"FEATURE_OIDC": "false"' in env_helper
     assert '"OIDC_ADMIN_SUBJECTS": ""' in env_helper
+
+
+def test_observability_helpers_keep_private_surfaces_private() -> None:
+    operations = read("imageroot/bin/grantora-operations")
+    pod_exec = read("imageroot/bin/grantora-pod-exec")
+    retention_action = read("imageroot/actions/run-retention/20retention")
+    status_helper = read("imageroot/bin/grantora-status")
+
+    assert "http://127.0.0.1:8080/metrics" in operations
+    assert "journalctl" in operations
+    assert "ALLOWED_LOG_UNITS" in operations
+    assert "operations_helper" in pod_exec
+    assert 'payload.get("dry_run", True)' in retention_action
+    assert '"helper_command": "grantora-pod-exec metrics"' in status_helper
 
 
 def test_no_shell_tracing_in_actions_or_helpers() -> None:

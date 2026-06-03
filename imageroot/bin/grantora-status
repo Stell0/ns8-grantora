@@ -22,7 +22,14 @@ UNITS = [
     "grantora-apisix.service",
     "grantora-user-sync.timer",
     "grantora-user-sync.service",
+    "grantora-retention.timer",
+    "grantora-retention.service",
 ]
+CONTAINER_LABELS = (
+    "org.opencontainers.image.version",
+    "org.label-schema.version",
+    "version",
+)
 REDACT_PATTERNS = (
     re.compile(r"(Bearer\s+)[A-Za-z0-9._~+/=-]+", re.IGNORECASE),
     re.compile(r'("[^"\\]*(?:token|password|secret|key)[^"\\]*"\s*:\s*")([^"\\]*)', re.IGNORECASE),
@@ -79,22 +86,65 @@ def pod_state() -> str:
     return "not_found"
 
 
+def image_version(image: str) -> str:
+    if "@" in image:
+        return image.rsplit("@", 1)[1]
+    tail = image.rsplit("/", 1)[-1]
+    if ":" in tail:
+        return tail.rsplit(":", 1)[1]
+    return ""
+
+
 def container_state(container: str) -> dict[str, object]:
     result = command(["podman", "inspect", container])
     if result.returncode != 0:
-        return {"exists": False, "state": "not_found", "health": "unknown", "image": ""}
+        return {
+            "exists": False,
+            "state": "not_found",
+            "health": "unknown",
+            "image": "",
+            "image_id": "",
+            "image_digest": "",
+            "version": "",
+        }
     try:
         data = json.loads(result.stdout)[0]
     except (json.JSONDecodeError, IndexError):
-        return {"exists": False, "state": "unknown", "health": "unknown", "image": ""}
+        return {
+            "exists": False,
+            "state": "unknown",
+            "health": "unknown",
+            "image": "",
+            "image_id": "",
+            "image_digest": "",
+            "version": "",
+        }
     state = data.get("State", {})
     config = data.get("Config", {})
+    labels = config.get("Labels") or {}
+    image = config.get("Image", "")
+    label_version = next((str(labels[label]) for label in CONTAINER_LABELS if labels.get(label)), "")
     return {
         "exists": True,
         "state": state.get("Status", "unknown"),
         "health": state.get("Health", {}).get("Status", "unknown"),
-        "image": config.get("Image", ""),
+        "image": image,
+        "image_id": data.get("Image", ""),
+        "image_digest": data.get("ImageDigest", ""),
+        "version": label_version or image_version(image),
     }
+
+
+def container_versions(containers: dict[str, dict[str, object]]) -> dict[str, dict[str, object]]:
+    versions = {}
+    for name, data in containers.items():
+        versions[name] = {
+            "image": data.get("image", ""),
+            "image_id": data.get("image_id", ""),
+            "image_digest": data.get("image_digest", ""),
+            "version": data.get("version", ""),
+        }
+    return versions
 
 
 def api_get(path: str) -> dict[str, object]:
@@ -112,6 +162,25 @@ try:
         except json.JSONDecodeError:
             body = payload
         json.dump({{"ok": True, "status_code": response.status, "body": body}}, sys.stdout)
+except Exception as exc:
+    json.dump({{"ok": False, "error": str(exc)}}, sys.stdout)
+'''
+    result = command(["podman", "exec", "grantora-api", "python", "-c", script])
+    if result.returncode == 0 and result.stdout:
+        return json.loads(result.stdout)
+    return {"ok": False, "error": command_error(result, "not_available")}
+
+
+def api_probe(path: str) -> dict[str, object]:
+    script = f'''
+import json
+import sys
+import urllib.request
+
+try:
+    with urllib.request.urlopen("http://127.0.0.1:8080{path}", timeout=5) as response:
+        response.read(1)
+        json.dump({{"ok": True, "status_code": response.status}}, sys.stdout)
 except Exception as exc:
     json.dump({{"ok": False, "error": str(exc)}}, sys.stdout)
 '''
@@ -153,6 +222,56 @@ def bootstrap_status() -> dict[str, object]:
         return {"error": "invalid_status"}
 
 
+def last_sync_error(user_sync: dict[str, object]) -> str:
+    if user_sync.get("error"):
+        return str(user_sync["error"])
+    details = user_sync.get("error_details")
+    if isinstance(details, list) and details:
+        first = details[0]
+        if isinstance(first, dict):
+            return str(first.get("error") or first)
+        return str(first)
+    return ""
+
+
+def log_sources() -> dict[str, object]:
+    return {
+        "backend": "systemd-user-journal",
+        "structured_json": True,
+        "sources": [
+            {
+                "unit": unit,
+                "command": f"journalctl --user-unit={unit} --no-pager",
+            }
+            for unit in UNITS
+        ],
+    }
+
+
+def metrics_status(enabled: bool) -> dict[str, object]:
+    status = {
+        "enabled": enabled,
+        "private": True,
+        "path": "/metrics",
+        "helper_command": "grantora-pod-exec metrics",
+    }
+    if enabled:
+        status["probe"] = api_probe("/metrics")
+    return status
+
+
+def retention_status(config: dict[str, object]) -> dict[str, object]:
+    return {
+        "audit_retention_days": config.get("audit_retention_days", 0),
+        "usage_retention_days": config.get("usage_retention_days", 0),
+        "timer_state": unit_state("grantora-retention.timer"),
+        "service_state": unit_state("grantora-retention.service"),
+        "dry_run_supported": True,
+        "helper_command": "grantora-operations retention --dry-run",
+        "last_run": load_json(STATE_DIR / "retention.json"),
+    }
+
+
 def main() -> None:
     env_result = subprocess.run([HELPER, "status"], text=True, check=True, capture_output=True)
     config = json.loads(env_result.stdout)
@@ -162,6 +281,9 @@ def main() -> None:
         "api": container_state("grantora-api"),
         "apisix": container_state("grantora-apisix"),
     }
+    user_sync = user_sync_status()
+    healthz = api_get("/healthz")
+    readyz = api_get("/readyz")
     output = {
         "configured": config["configured"],
         "public_base_url": config["public_base_url"],
@@ -172,13 +294,20 @@ def main() -> None:
         "pod": {"name": "grantora", "state": pod_state()},
         "units": {unit: unit_state(unit) for unit in UNITS},
         "containers": containers,
-        "healthz": api_get("/healthz"),
-        "readyz": api_get("/readyz"),
+        "container_versions": container_versions(containers),
+        "healthz": healthz,
+        "readyz": readyz,
+        "api_liveness": healthz,
+        "api_readiness": readyz,
         "apisix_sync": admin_get("/v1/admin/apisix/status"),
-        "user_sync": user_sync_status(),
+        "user_sync": user_sync,
+        "last_sync_error": last_sync_error(user_sync),
         "bootstrap": bootstrap_status(),
         "upgrade": load_json(STATE_DIR / "upgrade.json"),
         "secret_rotation": load_json(STATE_DIR / "secret-rotation.json"),
+        "logs": log_sources(),
+        "metrics": metrics_status(bool(config.get("metrics_enabled", False))),
+        "retention": retention_status(config),
     }
     health_body = output["healthz"].get("body")
     if isinstance(health_body, dict) and health_body.get("version"):

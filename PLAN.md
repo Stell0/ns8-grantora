@@ -734,33 +734,33 @@ Objective: make the module operable by NS8 administrators.
 
 Tasks:
 
-- [ ] Expose service logs through standard NS8 log collection.
-- [ ] Keep Grantora logs structured JSON in production.
-- [ ] Add `get-status` fields for:
-  - [ ] pod status;
-  - [ ] PostgreSQL container status;
-  - [ ] etcd container status;
-  - [ ] Grantora API container status;
-  - [ ] APISIX container status;
-  - [ ] API liveness;
-  - [ ] API readiness;
-  - [ ] APISIX sync status;
-  - [ ] last sync error;
-  - [ ] selected domain;
-  - [ ] user sync status;
-  - [ ] container versions.
-- [ ] Add optional metrics integration:
-  - [ ] keep `/metrics` private;
-  - [ ] access metrics only through pod-local helper unless a future operator-only collector integration is added;
-  - [ ] document how NS8/prometheus should scrape it if enabled.
-- [ ] Add retention action/timer for audit and usage if upstream CLI/API is available from the image.
-- [ ] Add troubleshooting commands in README:
-  - [ ] invalid admin bootstrap hash;
-  - [ ] missing or wrong encryption key;
-  - [ ] APISIX sync failure;
-  - [ ] PostgreSQL readiness failure;
-  - [ ] user-domain sync failure;
-  - [ ] pod/container unit failure.
+- [x] Expose service logs through standard NS8 log collection.
+- [x] Keep Grantora logs structured JSON in production.
+- [x] Add `get-status` fields for:
+  - [x] pod status;
+  - [x] PostgreSQL container status;
+  - [x] etcd container status;
+  - [x] Grantora API container status;
+  - [x] APISIX container status;
+  - [x] API liveness;
+  - [x] API readiness;
+  - [x] APISIX sync status;
+  - [x] last sync error;
+  - [x] selected domain;
+  - [x] user sync status;
+  - [x] container versions.
+- [x] Add optional metrics integration:
+  - [x] keep `/metrics` private;
+  - [x] access metrics only through pod-local helper unless a future operator-only collector integration is added;
+  - [x] document how NS8/prometheus should scrape it if enabled.
+- [x] Add retention action/timer for audit and usage if upstream CLI/API is available from the image.
+- [x] Add troubleshooting commands in README:
+  - [x] invalid admin bootstrap hash;
+  - [x] missing or wrong encryption key;
+  - [x] APISIX sync failure;
+  - [x] PostgreSQL readiness failure;
+  - [x] user-domain sync failure;
+  - [x] pod/container unit failure.
 
 Acceptance:
 

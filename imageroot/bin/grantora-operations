@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+
+import argparse
+import json
+import os
+import re
+import stat
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", Path.home() / ".local/state")) / "state"
+ALLOWED_LOG_UNITS = {
+    "grantora.service",
+    "grantora-pod.service",
+    "grantora-postgres.service",
+    "grantora-apisix-etcd.service",
+    "grantora-api.service",
+    "grantora-apisix.service",
+    "grantora-user-sync.timer",
+    "grantora-user-sync.service",
+    "grantora-retention.timer",
+    "grantora-retention.service",
+}
+REDACT_PATTERNS = (
+    re.compile(r"(Bearer\s+)[A-Za-z0-9._~+/=-]+", re.IGNORECASE),
+    re.compile(r'("[^"\\]*(?:token|password|secret|key)[^"\\]*"\s*:\s*")([^"\\]*)', re.IGNORECASE),
+    re.compile(r"\b([A-Z0-9_]*(?:TOKEN|PASSWORD|SECRET|KEY)[A-Z0-9_]*=)([^\s]+)", re.IGNORECASE),
+)
+
+
+class OperationsError(RuntimeError):
+    pass
+
+
+def redact(value: str) -> str:
+    redacted = value
+    for pattern in REDACT_PATTERNS:
+        redacted = pattern.sub(lambda match: f"{match.group(1)}<redacted>", redacted)
+    return redacted
+
+
+def command(
+    args: list[str | Path],
+    *,
+    timeout: int = 120,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    try:
+        result = subprocess.run(
+            [str(arg) for arg in args],
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        result = subprocess.CompletedProcess([str(arg) for arg in args], 127, "", str(exc))
+    except subprocess.TimeoutExpired as exc:
+        result = subprocess.CompletedProcess(
+            [str(arg) for arg in args],
+            124,
+            exc.stdout or "",
+            exc.stderr or "timeout",
+        )
+    if check and result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
+        raise OperationsError(redact(detail))
+    return result
+
+
+def write_json(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+    path.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+
+
+def retention(dry_run: bool) -> dict[str, object]:
+    args = ["podman", "exec", "grantora-api", "python", "-m", "grantora.cli.retention"]
+    if dry_run:
+        args.append("--dry-run")
+    result = command(args, timeout=900)
+    try:
+        payload = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError as exc:
+        raise OperationsError("retention command returned non-JSON output") from exc
+    if not isinstance(payload, dict):
+        raise OperationsError("retention command returned invalid JSON output")
+    record = {"ok": True, "ran_at": int(time.time())} | payload
+    write_json(STATE_DIR / "retention.json", record)
+    return record
+
+
+def metrics() -> str:
+    script = r'''
+import sys
+import urllib.error
+import urllib.request
+
+try:
+    with urllib.request.urlopen("http://127.0.0.1:8080/metrics", timeout=10) as response:
+        sys.stdout.buffer.write(response.read())
+except urllib.error.HTTPError as exc:
+    sys.stderr.buffer.write(exc.read())
+    sys.exit(exc.code if exc.code < 128 else 1)
+'''
+    result = command(["podman", "exec", "grantora-api", "python", "-c", script], timeout=30)
+    return result.stdout
+
+
+def logs(unit: str, lines: int) -> str:
+    if unit not in ALLOWED_LOG_UNITS:
+        raise OperationsError(f"unsupported log unit: {unit}")
+    result = command(
+        ["journalctl", "--user-unit", unit, "--no-pager", "--lines", str(lines)],
+        timeout=30,
+    )
+    return redact(result.stdout)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Grantora operator helper commands")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    retention_parser = subparsers.add_parser("retention", help="Prune expired audit and usage data")
+    retention_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report prunable rows without deleting them",
+    )
+
+    subparsers.add_parser("metrics", help="Print private Grantora metrics from inside the pod")
+
+    logs_parser = subparsers.add_parser("logs", help="Print redacted user-journal logs for an allowlisted unit")
+    logs_parser.add_argument("unit", choices=sorted(ALLOWED_LOG_UNITS))
+    logs_parser.add_argument("--lines", type=int, default=100, choices=range(1, 1001), metavar="1..1000")
+
+    args = parser.parse_args()
+    try:
+        if args.command == "retention":
+            json.dump(retention(args.dry_run), sys.stdout)
+        elif args.command == "metrics":
+            sys.stdout.write(metrics())
+        else:
+            sys.stdout.write(logs(args.unit, args.lines))
+    except Exception as exc:
+        print(redact(str(exc)), file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

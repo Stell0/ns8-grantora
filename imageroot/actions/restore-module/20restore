@@ -159,6 +159,15 @@ def run_smoke() -> dict[str, object]:
         raise RestoreError("invalid smoke helper output") from exc
 
 
+def enable_retention_timer() -> None:
+    run(
+        ["systemctl", "--user", "enable", "--now", "grantora-retention.timer"],
+        timeout=60,
+        check=False,
+        ignore_failure=True,
+    )
+
+
 def main() -> None:
     try:
         stop_runtime()
@@ -184,6 +193,7 @@ def main() -> None:
         sync = sync_apisix()
         smoke = run_smoke()
         start_unit("grantora.service")
+        enable_retention_timer()
         json.dump(
             {
                 "ok": True,

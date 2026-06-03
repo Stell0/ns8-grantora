@@ -1,0 +1,17 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "run-retention output",
+    "$id": "http://schema.nethserver.org/grantora/run-retention-output.json",
+    "description": "Grantora audit and usage retention result",
+    "type": "object",
+    "required": ["ok", "dry_run", "audit_deleted", "usage_deleted", "audit_cutoff", "usage_cutoff", "ran_at"],
+    "properties": {
+        "ok": {"type": "boolean"},
+        "dry_run": {"type": "boolean"},
+        "audit_deleted": {"type": "integer"},
+        "usage_deleted": {"type": "integer"},
+        "audit_cutoff": {"type": "string"},
+        "usage_cutoff": {"type": "string"},
+        "ran_at": {"type": "integer"}
+    }
+}

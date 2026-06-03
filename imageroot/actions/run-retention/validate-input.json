@@ -1,0 +1,14 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "run-retention input",
+    "$id": "http://schema.nethserver.org/grantora/run-retention-input.json",
+    "description": "Run Grantora audit and usage retention pruning",
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "dry_run": {
+            "type": "boolean",
+            "default": true
+        }
+    }
+}

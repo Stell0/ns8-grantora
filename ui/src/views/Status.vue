@@ -77,6 +77,18 @@
           }}</span>
         </cv-tile>
       </cv-column>
+      <cv-column :md="4" :max="4">
+        <cv-tile light class="metric-card">
+          <span class="metric-label">{{ $t("status.metrics") }}</span>
+          <span class="metric-value">{{ metricsState }}</span>
+        </cv-tile>
+      </cv-column>
+      <cv-column :md="4" :max="4">
+        <cv-tile light class="metric-card">
+          <span class="metric-label">{{ $t("status.retention") }}</span>
+          <span class="metric-value">{{ retentionWindow }}</span>
+        </cv-tile>
+      </cv-column>
     </cv-row>
 
     <cv-row>
@@ -138,6 +150,17 @@
                   checkDetails(status.apisix_sync)
                 }}</cv-structured-list-data>
               </cv-structured-list-item>
+              <cv-structured-list-item v-if="status.metrics.enabled">
+                <cv-structured-list-data>{{
+                  $t("status.metrics")
+                }}</cv-structured-list-data>
+                <cv-structured-list-data>{{
+                  checkResult(status.metrics.probe)
+                }}</cv-structured-list-data>
+                <cv-structured-list-data class="break-word">{{
+                  checkDetails(status.metrics.probe)
+                }}</cv-structured-list-data>
+              </cv-structured-list-item>
             </template>
           </cv-structured-list>
         </cv-tile>
@@ -170,6 +193,12 @@
             <div class="key-value-setting">
               <span class="label">{{ $t("status.errors") }}</span>
               <span class="value">{{ status.user_sync.errors || 0 }}</span>
+            </div>
+            <div class="key-value-setting">
+              <span class="label">{{ $t("status.last_sync_error") }}</span>
+              <span class="value break-word">{{
+                formatValue(status.last_sync_error)
+              }}</span>
             </div>
             <NsButton
               kind="secondary"
@@ -262,6 +291,9 @@
                 $t("status.health")
               }}</cv-structured-list-heading>
               <cv-structured-list-heading>{{
+                $t("status.version")
+              }}</cv-structured-list-heading>
+              <cv-structured-list-heading>{{
                 $t("status.image")
               }}</cv-structured-list-heading>
             </template>
@@ -280,11 +312,65 @@
                   container.health
                 }}</cv-structured-list-data>
                 <cv-structured-list-data class="break-word">{{
+                  formatValue(container.version)
+                }}</cv-structured-list-data>
+                <cv-structured-list-data class="break-word">{{
                   container.image
                 }}</cv-structured-list-data>
               </cv-structured-list-item>
             </template>
           </cv-structured-list>
+        </cv-tile>
+      </cv-column>
+    </cv-row>
+
+    <cv-row>
+      <cv-column class="page-subtitle">
+        <h4>{{ $t("status.operations") }}</h4>
+      </cv-column>
+    </cv-row>
+    <cv-row>
+      <cv-column>
+        <cv-tile light>
+          <div v-if="!loading.getStatus" class="sync-grid">
+            <div class="key-value-setting">
+              <span class="label">{{ $t("status.log_backend") }}</span>
+              <span class="value break-word">{{
+                formatValue(status.logs.backend)
+              }}</span>
+            </div>
+            <div class="key-value-setting">
+              <span class="label">{{ $t("status.structured_logs") }}</span>
+              <span class="value">{{ structuredLogsState }}</span>
+            </div>
+            <div class="key-value-setting">
+              <span class="label">{{ $t("status.retention_timer") }}</span>
+              <span class="value">{{
+                formatValue(status.retention.timer_state)
+              }}</span>
+            </div>
+            <div class="key-value-setting">
+              <span class="label">{{ $t("status.retention_last_run") }}</span>
+              <span class="value break-word">{{ retentionLastRun }}</span>
+            </div>
+            <div class="key-value-setting">
+              <span class="label">{{ $t("status.metrics_helper") }}</span>
+              <span class="value break-word">{{
+                formatValue(status.metrics.helper_command)
+              }}</span>
+            </div>
+            <div class="key-value-setting">
+              <span class="label">{{ $t("status.retention_helper") }}</span>
+              <span class="value break-word">{{
+                formatValue(status.retention.helper_command)
+              }}</span>
+            </div>
+          </div>
+          <cv-skeleton-text
+            v-else
+            :paragraph="true"
+            :line-count="4"
+          ></cv-skeleton-text>
         </cv-tile>
       </cv-column>
     </cv-row>
@@ -341,6 +427,36 @@ export default {
         "-"
       );
     },
+    metricsState() {
+      return this.status.metrics.enabled
+        ? this.$t("common.enabled")
+        : this.$t("common.disabled");
+    },
+    retentionWindow() {
+      const retention = this.status.retention || {};
+      if (!retention.audit_retention_days && !retention.usage_retention_days) {
+        return "-";
+      }
+      return this.$t("status.retention_window", {
+        audit: retention.audit_retention_days || 0,
+        usage: retention.usage_retention_days || 0,
+      });
+    },
+    retentionLastRun() {
+      const lastRun = (this.status.retention || {}).last_run || {};
+      if (!lastRun.ran_at) {
+        return "-";
+      }
+      const mode = lastRun.dry_run
+        ? this.$t("status.dry_run")
+        : this.$t("status.applied");
+      return `${this.formatTimestamp(lastRun.ran_at)} (${mode})`;
+    },
+    structuredLogsState() {
+      return this.status.logs.structured_json
+        ? this.$t("common.enabled")
+        : this.$t("common.disabled");
+    },
     unitRows() {
       return Object.keys(this.status.units || {}).map((name) => ({
         name,
@@ -352,6 +468,7 @@ export default {
         name,
         state: this.status.containers[name].state || "unknown",
         health: this.status.containers[name].health || "unknown",
+        version: this.status.containers[name].version || "",
         image: this.status.containers[name].image || "",
       }));
     },
@@ -380,11 +497,18 @@ export default {
         pod: {},
         units: {},
         containers: {},
+        container_versions: {},
         healthz: {},
         readyz: {},
+        api_liveness: {},
+        api_readiness: {},
         apisix_sync: {},
         user_sync: {},
+        last_sync_error: "",
         bootstrap: {},
+        logs: {},
+        metrics: {},
+        retention: {},
         running_upstream_version: "",
       };
     },

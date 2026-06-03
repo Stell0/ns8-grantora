@@ -36,7 +36,9 @@ if agent is not None and hasattr(agent, "delete_route"):
 route_file.unlink(missing_ok=True)
 PY
 
+systemctl --user disable --now grantora-user-sync.timer grantora-retention.timer || true
 systemctl --user disable --now grantora.service || true
 systemctl --user stop grantora-apisix.service grantora-api.service || true
+systemctl --user stop grantora-retention.service grantora-user-sync.service || true
 systemctl --user stop grantora-apisix-etcd.service grantora-postgres.service || true
 systemctl --user stop grantora-pod.service || true

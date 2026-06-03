@@ -2,7 +2,7 @@
 
 `ns8-grantora` packages the Grantora Agent Capability Gateway for NethServer 8 without forking upstream Grantora application logic.
 
-Milestone 4 adds the first bootstrap/admin helper flow described in [PLAN.md](PLAN.md). The module starts Grantora as one rootless Podman pod with helper containers managed by separate user systemd units, publishes only the APISIX runtime port on loopback, creates the public Traefik route to that runtime gateway, and provides NS8 actions for common Grantora Admin API setup.
+The module starts Grantora as one rootless Podman pod with helper containers managed by separate user systemd units, publishes only the APISIX runtime port on loopback, creates the public Traefik route to that runtime gateway, and provides NS8 actions for common Grantora Admin API setup and operations.
 
 ## Current scope
 
@@ -16,10 +16,12 @@ Milestone 4 adds the first bootstrap/admin helper flow described in [PLAN.md](PL
 - `grantora-admin` calls private Grantora Admin API endpoints from inside the pod, including APISIX reconciliation.
 - `run-smoke` verifies private runtime paths, loopback-only pod port publishing, and `0600` modes on secret-bearing state files.
 - `grantora-pod-exec` exposes safe pod-local health/status/Admin API calls with an allowlisted container exec fallback.
+- `grantora-operations` exposes redacted operator helpers for user-journal logs, private metrics, and audit/usage retention.
 - `bootstrap-workspace` creates or reuses the default workspace, seeds default runtime permissions/roles, lists built-in capability templates, and records ids in `state/bootstrap.json`.
 - Helper actions create applications, users, roles, capabilities from templates, agents, bindings, and secrets through pod-local Admin API calls.
 - One-time agent tokens are returned only by explicit create/rotate actions and are stored under `state/agent-tokens/` only when `store_token` is requested.
-- `get-defaults`, `get-configuration`, and `get-status` expose the initial operator-facing action contract.
+- `get-defaults`, `get-configuration`, and `get-status` expose the operator-facing action contract, including pod/container state, liveness/readiness, APISIX sync, user sync, metrics, logs, retention, and container version metadata.
+- `run-retention` can dry-run or apply upstream audit/usage pruning through the private Grantora API container, and `grantora-retention.timer` applies configured retention periodically.
 - CI validates markdown, shell scripts, Python action helpers, and action schema JSON.
 
 ## Install
@@ -104,9 +106,76 @@ Run the module smoke and security checks after configure, restore, or upgrade:
 api-cli run module/grantora1/run-smoke
 ```
 
-## Roadmap
+## Operations
 
-- Backup/restore, upgrades, and the admin UI are tracked in [PLAN.md](PLAN.md) as later milestones.
+`get-status` returns the main operator diagnostics without opening a container shell:
+
+```bash
+api-cli run module/grantora1/get-status
+```
+
+It includes pod state, per-unit state, per-container state and image metadata, `/healthz`, `/readyz`, APISIX sync, user sync status and last sync error, private metrics probe status, log source metadata, and the latest retention result.
+
+Service logs are emitted to the standard systemd user journal. The Grantora API container receives `GRANTORA_JSON_LOGS=true` in production, so application logs are structured JSON. Use the unit names reported by `get-status.logs.sources`:
+
+```bash
+journalctl --user-unit=grantora-api.service --no-pager --lines=200
+journalctl --user-unit=grantora-apisix.service --no-pager --lines=200
+```
+
+When running inside the module instance environment, use the redacting helper for allowlisted units:
+
+```bash
+grantora-operations logs grantora-api.service --lines 200
+```
+
+Metrics remain private. Do not expose `/metrics` through Traefik. For one-shot collection from inside the module instance environment:
+
+```bash
+grantora-pod-exec metrics
+```
+
+If an NS8 or Prometheus collector is added later, it must scrape from the module context or pod-local helper path, not from a public route. `get-status.metrics` reports whether metrics are enabled and whether the pod-local probe succeeds.
+
+Retention uses the upstream Grantora retention command inside `grantora-api`. Dry-run first, then apply explicitly:
+
+```bash
+api-cli run module/grantora1/run-retention --data '{"dry_run":true}'
+api-cli run module/grantora1/run-retention --data '{"dry_run":false}'
+systemctl --user status grantora-retention.timer
+```
+
+The timer runs the apply path periodically using `AUDIT_RETENTION_DAYS` and `USAGE_RETENTION_DAYS` from generated state. The latest result is stored in `state/retention.json` and surfaced by `get-status.retention.last_run`.
+
+Troubleshooting commands for common failures:
+
+```bash
+# Invalid admin bootstrap hash or APISIX Admin API credential mismatch
+grantora-admin GET /v1/admin/apisix/status
+grantora-operations logs grantora-api.service --lines 200
+
+# Missing or wrong encryption key, usually visible as readiness or secret-resolution errors
+api-cli run module/grantora1/get-status
+grantora-operations logs grantora-api.service --lines 200
+
+# APISIX sync failure
+grantora-admin POST /v1/admin/apisix/sync
+grantora-operations logs grantora-apisix.service --lines 200
+
+# PostgreSQL readiness failure
+systemctl --user status grantora-postgres.service
+grantora-pod-exec exec grantora-postgres pg_isready -U grantora -d grantora
+
+# User-domain sync failure
+api-cli run module/grantora1/sync-users
+grantora-users status
+grantora-operations logs grantora-user-sync.service --lines 200
+
+# Pod or container unit failure
+systemctl --user status grantora.service
+podman pod port grantora
+podman ps --pod --filter name=grantora
+```
 
 ## Tests
 

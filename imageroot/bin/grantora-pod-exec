@@ -4,6 +4,7 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 admin_helper="${script_dir}/grantora-admin"
+operations_helper="${script_dir}/grantora-operations"
 allowed_containers=" grantora-api grantora-postgres grantora-apisix-etcd grantora-apisix "
 
 usage() {
@@ -14,6 +15,7 @@ Commands:
   api-get PATH                    GET an unauthenticated Grantora API path inside the pod
   admin-get PATH                  GET a Grantora Admin API path through grantora-admin
   admin-post PATH [JSON|@-|@file] POST a Grantora Admin API path through grantora-admin
+	metrics                         Print private Grantora metrics from inside the pod
   pod-status                      Inspect the Grantora pod state
   container-status CONTAINER      Inspect a Grantora container state
   exec CONTAINER COMMAND [ARGS...] Execute an allowlisted pod container command
@@ -88,6 +90,9 @@ PY
 			exec "${admin_helper}" POST "${path}" --data-json "${data}"
 		fi
 		exec "${admin_helper}" POST "${path}"
+		;;
+	metrics)
+		exec "${operations_helper}" metrics
 		;;
 	pod-status)
 		exec podman pod inspect grantora --format '{{.State}}'
