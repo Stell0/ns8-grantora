@@ -7,13 +7,13 @@
   "authors": [
     {
       "name": "Stell0",
-      "email": "opensource@nethserver.org"
+      "email": "stefano.fancello@nethesis.it"
     }
   ],
   "docs": {
     "documentation_url": "https://github.com/Stell0/ns8-grantora/blob/main/README.md",
-    "bug_url": "https://github.com/NethServer/dev",
+    "bug_url": "https://github.com/Stell0/ns8-grantora/issues",
     "code_url": "https://github.com/Stell0/ns8-grantora"
   },
-  "source": "ghcr.io/nethserver/grantora"
+  "source": "ghcr.io/stell0/grantora"
 }
