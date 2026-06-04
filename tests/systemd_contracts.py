@@ -52,6 +52,9 @@ def test_systemd_pod_topology_contract() -> None:
     assert "Requires=grantora-pod.service grantora-postgres.service grantora-apisix-etcd.service" in api_unit
     assert "--env-file=%S/state/grantora.env --env-file=%S/state/secrets.env" in api_unit
 
+    etcd_unit = read("imageroot/systemd/user/grantora-apisix-etcd.service")
+    assert "%S/state/apisix-etcd-data:/bitnami/etcd:Z,U" in etcd_unit
+
     apisix_unit = read("imageroot/systemd/user/grantora-apisix.service")
     assert "Requires=grantora-pod.service grantora-api.service grantora-apisix-etcd.service" in apisix_unit
     assert "%S/state/apisix-config.yaml:/usr/local/apisix/conf/config.yaml:ro,Z" in apisix_unit
