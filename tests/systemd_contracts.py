@@ -28,6 +28,16 @@ def test_systemd_pod_topology_contract() -> None:
     for unit_name in RUNTIME_UNITS:
         assert f"Wants={unit_name}" in aggregate
         assert f"After={unit_name}" in aggregate
+    for state_file in (
+        "environment",
+        "secrets.env",
+        "runtime.env",
+        "grantora.env",
+        "postgres.env",
+        "apisix.env",
+        "apisix-config.yaml",
+    ):
+        assert f"ConditionPathExists=%S/state/{state_file}" in aggregate
 
     for unit_name, container_name in RUNTIME_UNITS.items():
         unit = read(f"imageroot/systemd/user/{unit_name}")

@@ -15,6 +15,13 @@ After=grantora-postgres.service
 After=grantora-apisix-etcd.service
 After=grantora-api.service
 After=grantora-apisix.service
+ConditionPathExists=%S/state/environment
+ConditionPathExists=%S/state/secrets.env
+ConditionPathExists=%S/state/runtime.env
+ConditionPathExists=%S/state/grantora.env
+ConditionPathExists=%S/state/postgres.env
+ConditionPathExists=%S/state/apisix.env
+ConditionPathExists=%S/state/apisix-config.yaml
 
 [Service]
 Type=oneshot
