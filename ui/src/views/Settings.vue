@@ -46,21 +46,26 @@
                     ref="host"
                   ></cv-text-input>
                 </cv-column>
-                <cv-column :md="4" :max="3">
-                  <cv-text-input
-                    :label="$t('settings.tcp_port')"
-                    v-model.number="tcpPort"
-                    :disabled="loadingUi"
-                    :invalid-message="error.tcpPort"
-                    ref="tcpPort"
-                  ></cv-text-input>
-                </cv-column>
-                <cv-column :md="4" :max="4" class="checkbox-column">
-                  <cv-checkbox
-                    v-model="letsEncrypt"
-                    :label="$t('settings.lets_encrypt')"
-                    :disabled="loadingUi"
-                  />
+                <cv-column :md="8" :max="7">
+                  <label class="bx--label settings-radio-label">
+                    {{ $t("settings.lets_encrypt") }}
+                  </label>
+                  <cv-radio-group vertical>
+                    <cv-radio-button
+                      name="lets-encrypt"
+                      :label="$t('common.enabled')"
+                      value="enabled"
+                      v-model="letsEncryptMode"
+                      :disabled="loadingUi"
+                    />
+                    <cv-radio-button
+                      name="lets-encrypt"
+                      :label="$t('common.disabled')"
+                      value="disabled"
+                      v-model="letsEncryptMode"
+                      :disabled="loadingUi"
+                    />
+                  </cv-radio-group>
                 </cv-column>
               </cv-row>
             </section>
@@ -68,24 +73,6 @@
             <section class="settings-section">
               <h4>{{ $t("settings.runtime_image") }}</h4>
               <cv-row>
-                <cv-column :md="4" :max="5">
-                  <cv-text-input
-                    :label="$t('settings.grantora_image')"
-                    v-model.trim="grantoraImage"
-                    :disabled="loadingUi"
-                    :invalid-message="error.grantoraImage"
-                    ref="grantoraImage"
-                  ></cv-text-input>
-                </cv-column>
-                <cv-column :md="4" :max="3">
-                  <cv-text-input
-                    :label="$t('settings.grantora_version')"
-                    v-model.trim="grantoraVersion"
-                    :disabled="loadingUi"
-                    :invalid-message="error.grantoraVersion"
-                    ref="grantoraVersion"
-                  ></cv-text-input>
-                </cv-column>
                 <cv-column :md="4" :max="4">
                   <NsComboBox
                     v-model="logLevel"
@@ -291,10 +278,7 @@ export default {
       },
       urlCheckInterval: null,
       host: "",
-      letsEncrypt: true,
-      tcpPort: 20000,
-      grantoraImage: "",
-      grantoraVersion: "",
+      letsEncryptMode: "enabled",
       logLevel: "INFO",
       metricsEnabled: false,
       userDomain: "-",
@@ -363,9 +347,6 @@ export default {
         getConfiguration: "",
         configureModule: "",
         host: "",
-        tcpPort: "",
-        grantoraImage: "",
-        grantoraVersion: "",
         userDomain: "",
         syncUsersIntervalMinutes: "",
         runtimeRateLimitCount: "",
@@ -401,10 +382,8 @@ export default {
       this.loading.getConfiguration = false;
       const config = taskResult.output;
       this.host = config.host || "";
-      this.letsEncrypt = config.lets_encrypt !== false;
-      this.tcpPort = config.tcp_port || 20000;
-      this.grantoraImage = config.grantora_image || "";
-      this.grantoraVersion = config.grantora_version || "";
+      this.letsEncryptMode =
+        config.lets_encrypt === false ? "disabled" : "enabled";
       this.logLevel = config.log_level || "INFO";
       this.metricsEnabled = Boolean(config.metrics_enabled);
       this.userDomains = config.available_user_domains || [];
@@ -447,20 +426,11 @@ export default {
         this.error.host = this.$t("settings.invalid_host");
         focusFirst("host");
       }
-      if (!this.grantoraImage) {
-        this.error.grantoraImage = this.$t("common.required");
-        focusFirst("grantoraImage");
-      }
-      if (!this.grantoraVersion) {
-        this.error.grantoraVersion = this.$t("common.required");
-        focusFirst("grantoraVersion");
-      }
       if (this.syncUsersEnabled && this.userDomain === "-") {
         this.error.userDomain = this.$t("common.required");
         focusFirst("userDomain");
       }
 
-      this.validateInteger("tcpPort", this.tcpPort, 1, 65535, focusFirst);
       this.validateInteger(
         "syncUsersIntervalMinutes",
         this.syncUsersIntervalMinutes,
@@ -541,8 +511,6 @@ export default {
       const fieldMap = {
         user_domain: "userDomain",
         sync_users_interval_minutes: "syncUsersIntervalMinutes",
-        grantora_image: "grantoraImage",
-        grantora_version: "grantoraVersion",
         runtime_rate_limit_count: "runtimeRateLimitCount",
         runtime_rate_limit_time_window: "runtimeRateLimitTimeWindow",
         audit_retention_days: "auditRetentionDays",
@@ -551,7 +519,6 @@ export default {
         upstream_connect_timeout_seconds: "upstreamConnectTimeoutSeconds",
         upstream_max_response_bytes: "upstreamMaxResponseBytes",
         upstream_read_retry_attempts: "upstreamReadRetryAttempts",
-        tcp_port: "tcpPort",
       };
       let focusAlreadySet = false;
 
@@ -581,10 +548,7 @@ export default {
       await this.runGrantoraAction(taskAction, {
         data: {
           host: this.host,
-          lets_encrypt: this.letsEncrypt,
-          tcp_port: Number(this.tcpPort),
-          grantora_image: this.grantoraImage,
-          grantora_version: this.grantoraVersion,
+          lets_encrypt: this.letsEncryptMode === "enabled",
           metrics_enabled: this.metricsEnabled,
           log_level: this.logLevel,
           user_domain: this.userDomain === "-" ? "" : this.userDomain,
@@ -651,6 +615,11 @@ export default {
 
 .settings-section h4 {
   margin-bottom: $spacing-05;
+}
+
+.settings-radio-label {
+  display: block;
+  margin-bottom: $spacing-03;
 }
 
 .checkbox-column {

@@ -132,6 +132,29 @@ def test_env_rendering_is_idempotent_and_preserves_secrets() -> None:
         assert runtime_env["APISIX_RUNTIME_UPSTREAM_NODE"] == "127.0.0.1:8080"
 
 
+def test_env_rendering_generates_hidden_tcp_port_when_not_provided() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        state_root = Path(tmp)
+        config = {
+            "host": "grantora.example.test",
+            "lets_encrypt": True,
+            "metrics_enabled": True,
+            "log_level": "INFO",
+        }
+
+        run_helper("imageroot/bin/grantora-env", "configure", state_root, config)
+        first_environment = parse_envfile(state_root / "state" / "environment")
+        first_port = int(first_environment["TCP_PORT"])
+
+        assert first_port not in {2379, 5432, 8080, 9180}
+        assert first_port != 9080
+
+        run_helper("imageroot/bin/grantora-env", "configure", state_root, config)
+        second_environment = parse_envfile(state_root / "state" / "environment")
+
+        assert int(second_environment["TCP_PORT"]) == first_port
+
+
 def test_domain_discovery_sanitizes_provider_metadata() -> None:
     namespace = load_namespace("imageroot/bin/grantora-users")
     sanitized_domain = namespace["sanitized_domain"]

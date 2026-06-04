@@ -130,6 +130,15 @@ def load_runtime_env() -> dict[str, str]:
     return env
 
 
+def allocate_tcp_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    if port in RESERVED_TCP_PORTS:
+        return allocate_tcp_port()
+    return port
+
+
 def configure() -> None:
     config = json.load(sys.stdin)
     if "tcp_port" in config and int(config["tcp_port"]) in RESERVED_TCP_PORTS:
@@ -137,6 +146,8 @@ def configure() -> None:
         print(f"tcp_port is reserved for private pod-local services: {reserved}", file=sys.stderr)
         sys.exit(2)
     env = load_runtime_env()
+    if "tcp_port" not in config and env.get("TCP_PORT") == DEFAULT_ENV["TCP_PORT"]:
+        env["TCP_PORT"] = str(allocate_tcp_port())
     for input_name, env_name in INPUT_TO_ENV.items():
         if input_name in config and config[input_name] is not None:
             env[env_name] = as_env_value(config[input_name])
