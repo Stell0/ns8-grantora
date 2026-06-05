@@ -47,25 +47,19 @@
                   ></cv-text-input>
                 </cv-column>
                 <cv-column :md="8" :max="7">
-                  <label class="bx--label settings-radio-label">
-                    {{ $t("settings.lets_encrypt") }}
-                  </label>
-                  <cv-radio-group vertical>
-                    <cv-radio-button
-                      name="lets-encrypt"
-                      :label="$t('common.enabled')"
-                      value="enabled"
-                      v-model="letsEncryptMode"
-                      :disabled="loadingUi"
-                    />
-                    <cv-radio-button
-                      name="lets-encrypt"
-                      :label="$t('common.disabled')"
-                      value="disabled"
-                      v-model="letsEncryptMode"
-                      :disabled="loadingUi"
-                    />
-                  </cv-radio-group>
+                  <NsToggle
+                    value="letsEncrypt"
+                    :label="$t('settings.lets_encrypt')"
+                    v-model="letsEncryptEnabled"
+                    :disabled="loadingUi"
+                  >
+                    <template slot="text-left">
+                      {{ $t("common.disabled") }}
+                    </template>
+                    <template slot="text-right">
+                      {{ $t("common.enabled") }}
+                    </template>
+                  </NsToggle>
                 </cv-column>
               </cv-row>
             </section>
@@ -278,7 +272,7 @@ export default {
       },
       urlCheckInterval: null,
       host: "",
-      letsEncryptMode: "enabled",
+      letsEncryptEnabled: true,
       logLevel: "INFO",
       metricsEnabled: false,
       userDomain: "-",
@@ -382,8 +376,7 @@ export default {
       this.loading.getConfiguration = false;
       const config = taskResult.output;
       this.host = config.host || "";
-      this.letsEncryptMode =
-        config.lets_encrypt === false ? "disabled" : "enabled";
+      this.letsEncryptEnabled = config.lets_encrypt !== false;
       this.logLevel = config.log_level || "INFO";
       this.metricsEnabled = Boolean(config.metrics_enabled);
       this.userDomains = config.available_user_domains || [];
@@ -548,7 +541,7 @@ export default {
       await this.runGrantoraAction(taskAction, {
         data: {
           host: this.host,
-          lets_encrypt: this.letsEncryptMode === "enabled",
+          lets_encrypt: this.letsEncryptEnabled,
           metrics_enabled: this.metricsEnabled,
           log_level: this.logLevel,
           user_domain: this.userDomain === "-" ? "" : this.userDomain,
@@ -615,11 +608,6 @@ export default {
 
 .settings-section h4 {
   margin-bottom: $spacing-05;
-}
-
-.settings-radio-label {
-  display: block;
-  margin-bottom: $spacing-03;
 }
 
 .checkbox-column {
