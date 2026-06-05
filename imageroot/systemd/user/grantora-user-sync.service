@@ -5,4 +5,4 @@ Requires=grantora-api.service
 
 [Service]
 Type=oneshot
-ExecStart=grantora-users sync
+ExecStart=%h/.config/bin/grantora-users sync
