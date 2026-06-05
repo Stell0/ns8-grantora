@@ -20,6 +20,27 @@
         "user_domain": {
             "type": "string"
         },
+        "ldap_user_domain": {
+            "type": "string"
+        },
+        "configured": {
+            "type": "boolean"
+        },
+        "files": {
+            "type": "object"
+        },
+        "public_base_url": {
+            "type": "string"
+        },
+        "available_user_domains": {
+            "type": "array"
+        },
+        "user_domain_discovery_error": {
+            "type": "string"
+        },
+        "user_sync": {
+            "type": "object"
+        },
         "sync_users_enabled": {
             "type": "boolean"
         },

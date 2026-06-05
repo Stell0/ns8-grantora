@@ -79,6 +79,8 @@ def test_configure_schema_matches_env_renderer_inputs() -> None:
     properties = schema["properties"]
     for input_name in input_to_env:
         assert input_name in properties, f"{input_name} is rendered but missing from schema"
+    assert "user_domain" in properties
+    assert "ldap_user_domain" in properties
     assert set(properties["tcp_port"]["not"]["enum"]) == {2379, 5432, 8080, 9180}
 
 

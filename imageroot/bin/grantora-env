@@ -183,6 +183,8 @@ def allocate_tcp_port() -> int:
 
 def configure() -> None:
     config = json.load(sys.stdin)
+    if "user_domain" not in config and config.get("ldap_user_domain"):
+        config["user_domain"] = config["ldap_user_domain"]
     if "tcp_port" in config and int(config["tcp_port"]) in RESERVED_TCP_PORTS:
         reserved = ", ".join(str(port) for port in sorted(RESERVED_TCP_PORTS))
         print(f"tcp_port is reserved for private pod-local services: {reserved}", file=sys.stderr)
