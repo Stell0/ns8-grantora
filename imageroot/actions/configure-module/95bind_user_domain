@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+
+import json
+import subprocess
+from pathlib import Path
+
+
+bin_dir = Path(__file__).resolve().parents[2] / "bin"
+env_helper = bin_dir / "grantora-env"
+users_helper = bin_dir / "grantora-users"
+
+config = json.loads(subprocess.run([env_helper, "status"], text=True, check=True, capture_output=True).stdout)
+subprocess.run([users_helper, "bind", config.get("ldap_user_domain", "")], text=True, check=True)

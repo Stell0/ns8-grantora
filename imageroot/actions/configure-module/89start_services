@@ -1,0 +1,12 @@
+#!/bin/bash
+
+#
+# Copyright (C) 2023 Nethesis S.r.l.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+
+# Start the runtime only after configure-module has rendered all runtime state.
+
+systemctl --user daemon-reload
+systemctl --user enable grantora.service
+systemctl --user restart grantora.service
