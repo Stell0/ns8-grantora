@@ -282,13 +282,14 @@ def status() -> dict[str, object]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Grantora NS8 user-domain helpers")
     parser.add_argument("command", choices=["domains", "bind", "sync", "status"])
-    parser.add_argument("domain", nargs="?", default="")
+    parser.add_argument("domain", nargs="?", default=None)
     args = parser.parse_args()
 
     if args.command == "domains":
         json.dump(discover_domains(), sys.stdout)
     elif args.command == "bind":
-        json.dump({"bound": bind_selected_domain(args.domain or selected_domain())}, sys.stdout)
+        domain = selected_domain() if args.domain is None else args.domain
+        json.dump({"bound": bind_selected_domain(domain)}, sys.stdout)
     elif args.command == "sync":
         json.dump(sync_users(), sys.stdout)
     else:

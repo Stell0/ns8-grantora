@@ -42,3 +42,4 @@ systemctl --user stop grantora-apisix.service grantora-api.service || true
 systemctl --user stop grantora-retention.service grantora-user-sync.service || true
 systemctl --user stop grantora-apisix-etcd.service grantora-postgres.service || true
 systemctl --user stop grantora-pod.service || true
+podman volume rm --force grantora-postgres-data grantora-apisix-etcd-data || true

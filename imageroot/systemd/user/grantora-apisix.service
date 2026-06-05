@@ -9,7 +9,22 @@ Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=on-failure
 TimeoutStopSec=70
 ExecStartPre=-/usr/bin/rm -f %t/%N.cid %t/%N.pid
-ExecStart=/usr/bin/podman run --rm --replace --name=grantora-apisix --cidfile=%t/%N.cid --conmon-pidfile=%t/%N.pid --cgroups=no-conmon --pod=grantora --env-file=%S/state/apisix.env --env-file=%S/state/secrets.env --volume=%S/state/apisix-config.yaml:/usr/local/apisix/conf/config.yaml:ro,Z --health-cmd="sh -ec 'apisix status && curl -sS --max-time 2 http://127.0.0.1:9080/ >/dev/null'" --health-interval=10s --health-timeout=5s --health-retries=5 docker.io/apache/apisix:3.10.0-debian
+ExecStart=/usr/bin/podman run \
+    --rm \
+    --replace \
+    --name=grantora-apisix \
+    --cidfile=%t/%N.cid \
+    --conmon-pidfile=%t/%N.pid \
+    --cgroups=no-conmon \
+    --pod=grantora \
+    --env-file=%S/state/apisix.env \
+    --env-file=%S/state/secrets.env \
+    --volume=%S/state/apisix-config.yaml:/usr/local/apisix/conf/config.yaml:ro,Z \
+    --health-cmd="sh -ec 'apisix status && curl -sS --max-time 2 http://127.0.0.1:9080/ >/dev/null'" \
+    --health-interval=10s \
+    --health-timeout=5s \
+    --health-retries=5 \
+    docker.io/apache/apisix:3.10.0-debian
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%N.cid
 ExecStopPost=/usr/bin/podman rm --ignore --force --cidfile=%t/%N.cid
 ExecStopPost=-/usr/bin/rm -f %t/%N.cid %t/%N.pid

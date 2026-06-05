@@ -19,8 +19,11 @@ def read(path: str) -> str:
 
 def test_systemd_pod_topology_contract() -> None:
     pod_unit = read("imageroot/systemd/user/grantora-pod.service")
-    assert "pod create --replace --name=grantora" in pod_unit
+    assert "ExecStart=/usr/bin/podman pod create" in pod_unit
+    assert "--replace" in pod_unit
+    assert "--name=grantora" in pod_unit
     assert "--publish=127.0.0.1:${TCP_PORT}:9080" in pod_unit
+    assert "mkdir -p %S/state/containers" in pod_unit
     for port in PRIVATE_PORTS:
         assert f":{port}" not in pod_unit.replace(":9080", "")
 
@@ -50,10 +53,14 @@ def test_systemd_pod_topology_contract() -> None:
 
     api_unit = read("imageroot/systemd/user/grantora-api.service")
     assert "Requires=grantora-pod.service grantora-postgres.service grantora-apisix-etcd.service" in api_unit
-    assert "--env-file=%S/state/grantora.env --env-file=%S/state/secrets.env" in api_unit
+    assert "--env-file=%S/state/grantora.env" in api_unit
+    assert "--env-file=%S/state/secrets.env" in api_unit
 
     etcd_unit = read("imageroot/systemd/user/grantora-apisix-etcd.service")
-    assert "%S/state/apisix-etcd-data:/bitnami/etcd:Z,U" in etcd_unit
+    assert "grantora-apisix-etcd-data:/bitnami/etcd" in etcd_unit
+
+    postgres_unit = read("imageroot/systemd/user/grantora-postgres.service")
+    assert "grantora-postgres-data:/var/lib/postgresql/data" in postgres_unit
 
     apisix_unit = read("imageroot/systemd/user/grantora-apisix.service")
     assert "Requires=grantora-pod.service grantora-api.service grantora-apisix-etcd.service" in apisix_unit
@@ -71,6 +78,10 @@ def test_lifecycle_restore_and_security_smoke_contracts() -> None:
     assert "restore_database()" in restore
     assert "sync_apisix()" in restore
     assert "run_smoke()" in restore
+    assert 'podman", "volume", "rm", "--force", APISIX_ETCD_VOLUME' in restore
+
+    destroy = read("imageroot/actions/destroy-module/20destroy")
+    assert "podman volume rm --force grantora-postgres-data grantora-apisix-etcd-data || true" in destroy
 
     upgrade = read("imageroot/bin/grantora-lifecycle")
     assert "backup_for_upgrade" in upgrade

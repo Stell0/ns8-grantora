@@ -9,8 +9,11 @@ Environment=PODMAN_SYSTEMD_UNIT=%n
 EnvironmentFile=-%S/state/environment
 EnvironmentFile=-%S/state/runtime.env
 WorkingDirectory=%S/state
-ExecStartPre=/usr/bin/mkdir -p %S/state/postgres-data %S/state/apisix-etcd-data %S/state/containers
-ExecStart=/usr/bin/podman pod create --replace --name=grantora --publish=127.0.0.1:${TCP_PORT}:9080
+ExecStartPre=/usr/bin/mkdir -p %S/state/containers
+ExecStart=/usr/bin/podman pod create \
+    --replace \
+    --name=grantora \
+    --publish=127.0.0.1:${TCP_PORT}:9080
 ExecStop=/usr/bin/podman pod stop --ignore grantora
 ExecStopPost=/usr/bin/podman pod rm --ignore --force grantora
 

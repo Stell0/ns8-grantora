@@ -14,7 +14,27 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 
-STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", Path.home() / ".local/state")) / "state"
+def state_roots() -> list[Path]:
+    explicit = os.environ.get("STATE_DIRECTORY")
+    if explicit:
+        return [Path(explicit)]
+
+    roots: list[Path] = []
+    xdg_state_home = os.environ.get("XDG_STATE_HOME")
+    if xdg_state_home:
+        roots.append(Path(xdg_state_home))
+    else:
+        roots.append(Path.home() / ".local/state")
+
+    for compat_root in (Path.home() / ".local/state", Path.home() / ".config"):
+        if compat_root not in roots:
+            roots.append(compat_root)
+    return roots
+
+
+STATE_ROOTS = tuple(state_roots())
+STATE_DIRS = tuple(root / "state" for root in STATE_ROOTS)
+STATE_DIR = STATE_DIRS[0]
 
 HOST_RE = re.compile(
     r"^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)"
@@ -98,6 +118,28 @@ def write_envfile(path: Path, values: dict[str, str], secret: bool = False) -> N
         path.chmod(stat.S_IRUSR | stat.S_IWUSR)
 
 
+def first_existing_state_file(name: str) -> Path:
+    for state_dir in STATE_DIRS:
+        candidate = state_dir / name
+        if candidate.exists():
+            return candidate
+    return STATE_DIR / name
+
+
+def write_state_envfile(name: str, values: dict[str, str], secret: bool = False) -> None:
+    for state_dir in STATE_DIRS:
+        write_envfile(state_dir / name, values, secret=secret)
+
+
+def write_state_text(name: str, content: str, secret: bool = False) -> None:
+    for state_dir in STATE_DIRS:
+        path = state_dir / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        if secret:
+            path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+
+
 def as_env_value(value: object) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
@@ -124,7 +166,7 @@ def default_host() -> str:
 
 
 def load_runtime_env() -> dict[str, str]:
-    current = parse_envfile(STATE_DIR / "environment")
+    current = parse_envfile(first_existing_state_file("environment"))
     env = DEFAULT_ENV | current
     env.setdefault("GRANTORA_PUBLIC_BASE_URL", f"http://127.0.0.1:{env['TCP_PORT']}")
     return env
@@ -163,7 +205,7 @@ def configure() -> None:
                 env["SYNC_USERS_ENABLED"] = "false"
     if "lets_encrypt" in config:
         env["TRAEFIK_LETS_ENCRYPT"] = as_env_value(config["lets_encrypt"])
-    write_envfile(STATE_DIR / "environment", env)
+    write_state_envfile("environment", env)
     render()
 
 
@@ -192,7 +234,7 @@ def default_config() -> dict[str, object]:
 
 
 def generated_secrets() -> dict[str, str]:
-    secrets_env = parse_envfile(STATE_DIR / "secrets.env")
+    secrets_env = parse_envfile(first_existing_state_file("secrets.env"))
     secrets_env.setdefault("POSTGRES_PASSWORD", secrets.token_urlsafe(32))
     secrets_env.setdefault("APISIX_ADMIN_KEY", secrets.token_urlsafe(32))
     secrets_env.setdefault(
@@ -218,9 +260,9 @@ def render() -> None:
         f"{secrets_env['POSTGRES_PASSWORD']}@127.0.0.1:5432/grantora"
     )
 
-    write_envfile(STATE_DIR / "secrets.env", secrets_env, secret=True)
-    write_envfile(
-        STATE_DIR / "runtime.env",
+    write_state_envfile("secrets.env", secrets_env, secret=True)
+    write_state_envfile(
+        "runtime.env",
         {
             "APISIX_ADMIN_URL": "http://127.0.0.1:9180",
             "APISIX_ETCD_ENDPOINT": "http://127.0.0.1:2379",
@@ -231,8 +273,8 @@ def render() -> None:
             "TCP_PORT": env["TCP_PORT"],
         },
     )
-    write_envfile(
-        STATE_DIR / "postgres.env",
+    write_state_envfile(
+        "postgres.env",
         {
             "PGDATA": "/var/lib/postgresql/data/pgdata",
             "POSTGRES_DB": "grantora",
@@ -241,8 +283,8 @@ def render() -> None:
         },
         secret=True,
     )
-    write_envfile(
-        STATE_DIR / "grantora.env",
+    write_state_envfile(
+        "grantora.env",
         {
             "APISIX_ADMIN_TIMEOUT_SECONDS": "5",
             "APISIX_ADMIN_URL": "http://127.0.0.1:9180",
@@ -282,7 +324,7 @@ def render() -> None:
             "USAGE_RETENTION_DAYS": env["USAGE_RETENTION_DAYS"],
         },
     )
-    write_envfile(STATE_DIR / "apisix.env", {"APISIX_STAND_ALONE": "false"})
+    write_state_envfile("apisix.env", {"APISIX_STAND_ALONE": "false"})
     render_apisix_config(secrets_env["APISIX_ADMIN_KEY"])
 
 
@@ -313,15 +355,13 @@ plugin_attr:
       ip: 127.0.0.1
       port: 9091
 """
-    path = STATE_DIR / "apisix-config.yaml"
-    path.write_text(config, encoding="utf-8")
-    path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    write_state_text("apisix-config.yaml", config, secret=True)
 
 
 def status() -> None:
     env = load_runtime_env()
     files = {
-        name: (STATE_DIR / name).exists()
+        name: any((state_dir / name).exists() for state_dir in STATE_DIRS)
         for name in (
             "runtime.env",
             "grantora.env",

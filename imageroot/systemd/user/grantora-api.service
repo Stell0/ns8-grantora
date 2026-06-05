@@ -10,7 +10,21 @@ EnvironmentFile=%S/state/environment
 Restart=on-failure
 TimeoutStopSec=70
 ExecStartPre=-/usr/bin/rm -f %t/%N.cid %t/%N.pid
-ExecStart=/usr/bin/podman run --rm --replace --name=grantora-api --cidfile=%t/%N.cid --conmon-pidfile=%t/%N.pid --cgroups=no-conmon --pod=grantora --env-file=%S/state/grantora.env --env-file=%S/state/secrets.env --health-cmd="python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/healthz\", timeout=2).read(); urllib.request.urlopen(\"http://127.0.0.1:8080/readyz\", timeout=2).read()'" --health-interval=10s --health-timeout=3s --health-retries=5 ${GRANTORA_IMAGE}
+ExecStart=/usr/bin/podman run \
+    --rm \
+    --replace \
+    --name=grantora-api \
+    --cidfile=%t/%N.cid \
+    --conmon-pidfile=%t/%N.pid \
+    --cgroups=no-conmon \
+    --pod=grantora \
+    --env-file=%S/state/grantora.env \
+    --env-file=%S/state/secrets.env \
+    --health-cmd="python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/healthz\", timeout=2).read(); urllib.request.urlopen(\"http://127.0.0.1:8080/readyz\", timeout=2).read()'" \
+    --health-interval=10s \
+    --health-timeout=3s \
+    --health-retries=5 \
+    ${GRANTORA_IMAGE}
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%N.cid
 ExecStopPost=/usr/bin/podman rm --ignore --force --cidfile=%t/%N.cid
 ExecStopPost=-/usr/bin/rm -f %t/%N.cid %t/%N.pid

@@ -9,7 +9,23 @@ Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=on-failure
 TimeoutStopSec=70
 ExecStartPre=-/usr/bin/rm -f %t/%N.cid %t/%N.pid
-ExecStart=/usr/bin/podman run --rm --replace --name=grantora-apisix-etcd --cidfile=%t/%N.cid --conmon-pidfile=%t/%N.pid --cgroups=no-conmon --pod=grantora --env=ALLOW_NONE_AUTHENTICATION=yes --env=ETCD_ADVERTISE_CLIENT_URLS=http://127.0.0.1:2379 --env=ETCD_LISTEN_CLIENT_URLS=http://127.0.0.1:2379 --volume=%S/state/apisix-etcd-data:/bitnami/etcd:Z,U --health-cmd="etcdctl endpoint health --endpoints=http://127.0.0.1:2379" --health-interval=10s --health-timeout=5s --health-retries=5 docker.io/bitnamilegacy/etcd:3.5
+ExecStart=/usr/bin/podman run \
+    --rm \
+    --replace \
+    --name=grantora-apisix-etcd \
+    --cidfile=%t/%N.cid \
+    --conmon-pidfile=%t/%N.pid \
+    --cgroups=no-conmon \
+    --pod=grantora \
+    --env=ALLOW_NONE_AUTHENTICATION=yes \
+    --env=ETCD_ADVERTISE_CLIENT_URLS=http://127.0.0.1:2379 \
+    --env=ETCD_LISTEN_CLIENT_URLS=http://127.0.0.1:2379 \
+    --volume=grantora-apisix-etcd-data:/bitnami/etcd \
+    --health-cmd="etcdctl endpoint health --endpoints=http://127.0.0.1:2379" \
+    --health-interval=10s \
+    --health-timeout=5s \
+    --health-retries=5 \
+    docker.io/bitnamilegacy/etcd:3.5
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%N.cid
 ExecStopPost=/usr/bin/podman rm --ignore --force --cidfile=%t/%N.cid
 ExecStopPost=-/usr/bin/rm -f %t/%N.cid %t/%N.pid

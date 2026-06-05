@@ -17,6 +17,7 @@ ADMIN_HELPER = BIN_DIR / "grantora-admin"
 SMOKE_HELPER = BIN_DIR / "grantora-smoke"
 USERS_HELPER = BIN_DIR / "grantora-users"
 STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", Path.home() / ".local/state")) / "state"
+APISIX_ETCD_VOLUME = "grantora-apisix-etcd-data"
 REDACT_PATTERNS = (
     re.compile(r"(Bearer\s+)[A-Za-z0-9._~+/=-]+", re.IGNORECASE),
     re.compile(r'("[^"\\]*(?:token|password|secret|key)[^"\\]*"\s*:\s*")([^"\\]*)', re.IGNORECASE),
@@ -69,6 +70,15 @@ def stop_runtime() -> None:
             "grantora-pod.service",
         ],
         timeout=120,
+        check=False,
+        ignore_failure=True,
+    )
+
+
+def reset_apisix_volume() -> None:
+    run(
+        ["podman", "volume", "rm", "--force", APISIX_ETCD_VOLUME],
+        timeout=60,
         check=False,
         ignore_failure=True,
     )
@@ -172,8 +182,7 @@ def main() -> None:
     try:
         stop_runtime()
         run([ENV_HELPER, "render"], timeout=60)
-        shutil.rmtree(STATE_DIR / "apisix-etcd-data", ignore_errors=True)
-        (STATE_DIR / "apisix-etcd-data").mkdir(parents=True, exist_ok=True)
+        reset_apisix_volume()
 
         run(["systemctl", "--user", "daemon-reload"], timeout=60)
         run(["systemctl", "--user", "enable", "grantora.service"], timeout=60)
