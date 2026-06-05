@@ -42,7 +42,7 @@ HOST_RE = re.compile(
 )
 
 DEFAULT_ENV = {
-    "GRANTORA_IMAGE": "ghcr.io/grantora/grantora-api:0.1.0",
+    "GRANTORA_IMAGE": "ghcr.io/stell0/grantora-api:0.1.0",
     "GRANTORA_VERSION": "0.1.0",
     "GRANTORA_LOG_LEVEL": "INFO",
     "METRICS_ENABLED": "true",

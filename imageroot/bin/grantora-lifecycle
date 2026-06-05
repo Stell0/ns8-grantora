@@ -24,7 +24,7 @@ ADMIN_HELPER = BIN_DIR / "grantora-admin"
 PG_DUMP_HELPER = BIN_DIR / "grantora-pg-dump"
 SMOKE_HELPER = BIN_DIR / "grantora-smoke"
 
-DEFAULT_IMAGE = "ghcr.io/grantora/grantora-api:0.1.0"
+DEFAULT_IMAGE = "ghcr.io/stell0/grantora-api:0.1.0"
 DEFAULT_VERSION = "0.1.0"
 IMAGE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+-]*[A-Za-z0-9]$")
 VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")

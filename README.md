@@ -110,7 +110,7 @@ api-cli run module/grantora1/configure-module --data '{
 	"user_domain": "ad.example.org",
 	"sync_users_enabled": true,
 	"sync_users_interval_minutes": 60,
-	"grantora_image": "ghcr.io/grantora/grantora-api",
+	"grantora_image": "ghcr.io/stell0/grantora-api",
 	"grantora_version": "0.1.0",
 	"metrics_enabled": true,
 	"log_level": "INFO",
@@ -246,7 +246,7 @@ Upgrade the upstream Grantora API image with `upgrade-module`. Use immutable ima
 ```bash
 api-cli run module/grantora1/upgrade-module --data '{
 	"grantora_version": "0.1.1",
-	"grantora_image": "ghcr.io/grantora/grantora-api",
+	"grantora_image": "ghcr.io/stell0/grantora-api",
 	"pull": true,
 	"rollback_on_failure": true
 }'

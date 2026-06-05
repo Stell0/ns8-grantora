@@ -93,7 +93,7 @@ def test_build_image_declares_runtime_scan_targets() -> None:
     build_script = read("build-images.sh")
     assert "org.nethserver.images=" in build_script
     for image in (
-        "ghcr.io/grantora/grantora-api:0.1.0",
+        "ghcr.io/stell0/grantora-api:0.1.0",
         "docker.io/library/postgres:16-alpine",
         "docker.io/bitnamilegacy/etcd:3.5",
         "docker.io/apache/apisix:3.10.0-debian",

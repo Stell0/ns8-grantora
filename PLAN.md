@@ -289,7 +289,7 @@ If a future feature adds operator route exposure, it must be a separate explicit
 {
   "host": "grantora.example.org",
   "user_domain": "ad.example.org",
-  "grantora_image": "ghcr.io/grantora/grantora-api",
+  "grantora_image": "ghcr.io/stell0/grantora-api",
   "grantora_version": "0.1.0",
   "metrics_enabled": true,
   "log_level": "INFO",
