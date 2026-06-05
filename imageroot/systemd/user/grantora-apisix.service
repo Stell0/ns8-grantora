@@ -19,12 +19,15 @@ ExecStart=/usr/bin/podman run \
     --pod=grantora \
     --env-file=%S/state/apisix.env \
     --env-file=%S/state/secrets.env \
-    --volume=%S/state/apisix-config.yaml:/usr/local/apisix/conf/config.yaml:ro,Z \
+    --volume=%S/state/apisix-config.yaml:/usr/local/apisix/conf/config-template.yaml:ro,Z \
+    --volume=%h/.config/bin/grantora-apisix-render-start:/usr/local/bin/render-and-start-apisix.sh:ro,Z \
+    --entrypoint=/bin/sh \
     --health-cmd="sh -ec 'apisix status && curl -sS --max-time 2 http://127.0.0.1:9080/ >/dev/null'" \
     --health-interval=10s \
     --health-timeout=5s \
     --health-retries=5 \
-    docker.io/apache/apisix:3.10.0-debian
+    docker.io/apache/apisix:3.10.0-debian \
+    /usr/local/bin/render-and-start-apisix.sh
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%N.cid
 ExecStopPost=/usr/bin/podman rm --ignore --force --cidfile=%t/%N.cid
 ExecStopPost=-/usr/bin/rm -f %t/%N.cid %t/%N.pid

@@ -64,7 +64,10 @@ def test_systemd_pod_topology_contract() -> None:
 
     apisix_unit = read("imageroot/systemd/user/grantora-apisix.service")
     assert "Requires=grantora-pod.service grantora-api.service grantora-apisix-etcd.service" in apisix_unit
-    assert "%S/state/apisix-config.yaml:/usr/local/apisix/conf/config.yaml:ro,Z" in apisix_unit
+    assert "%S/state/apisix-config.yaml:/usr/local/apisix/conf/config-template.yaml:ro,Z" in apisix_unit
+    assert "%h/.config/bin/grantora-apisix-render-start:/usr/local/bin/render-and-start-apisix.sh:ro,Z" in apisix_unit
+    assert "--entrypoint=/bin/sh" in apisix_unit
+    assert "/usr/local/bin/render-and-start-apisix.sh" in apisix_unit
 
 
 def test_lifecycle_restore_and_security_smoke_contracts() -> None:
@@ -87,6 +90,11 @@ def test_lifecycle_restore_and_security_smoke_contracts() -> None:
     assert "backup_for_upgrade" in upgrade
     assert "container_image_snapshot" in upgrade
     assert "rollback_on_failure" in upgrade
+
+    apisix_start = read("imageroot/bin/grantora-apisix-render-start")
+    assert 'APISIX_ADMIN_KEY is required' in apisix_start
+    assert 'config-template.yaml' in apisix_start
+    assert 'exec /usr/bin/apisix start' in apisix_start
 
 
 def test_build_image_declares_runtime_scan_targets() -> None:

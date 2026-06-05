@@ -138,6 +138,8 @@ def write_state_text(name: str, content: str, secret: bool = False) -> None:
         path.write_text(content, encoding="utf-8")
         if secret:
             path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+        else:
+            path.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
 
 
 def as_env_value(value: object) -> str:
@@ -183,6 +185,8 @@ def allocate_tcp_port() -> int:
 
 def configure() -> None:
     config = json.load(sys.stdin)
+    if "user_domain" not in config and config.get("ldap_user_domain"):
+        config["user_domain"] = config["ldap_user_domain"]
     if "tcp_port" in config and int(config["tcp_port"]) in RESERVED_TCP_PORTS:
         reserved = ", ".join(str(port) for port in sorted(RESERVED_TCP_PORTS))
         print(f"tcp_port is reserved for private pod-local services: {reserved}", file=sys.stderr)
@@ -325,10 +329,10 @@ def render() -> None:
         },
     )
     write_state_envfile("apisix.env", {"APISIX_STAND_ALONE": "false"})
-    render_apisix_config(secrets_env["APISIX_ADMIN_KEY"])
+    render_apisix_config()
 
 
-def render_apisix_config(admin_key: str) -> None:
+def render_apisix_config() -> None:
     config = f"""apisix:
   node_listen: 9080
   enable_ipv6: false
@@ -343,7 +347,7 @@ deployment:
       - 127.0.0.0/24
     admin_key:
       - name: admin
-        key: {admin_key}
+        key: ${{APISIX_ADMIN_KEY}}
         role: admin
   etcd:
     host:
@@ -355,7 +359,7 @@ plugin_attr:
       ip: 127.0.0.1
       port: 9091
 """
-    write_state_text("apisix-config.yaml", config, secret=True)
+    write_state_text("apisix-config.yaml", config)
 
 
 def status() -> None:

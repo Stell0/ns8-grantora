@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Optional, Union
 
 
 STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", Path.home() / ".local/state")) / "state"
@@ -43,7 +44,7 @@ def redact(value: str) -> str:
 
 
 def command(
-    args: list[str | Path],
+    args: list[Union[str, Path]],
     *,
     timeout: int = 120,
     check: bool = True,

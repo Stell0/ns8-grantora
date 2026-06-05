@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+
+TEMPLATE=/usr/local/apisix/conf/config-template.yaml
+TARGET=/usr/local/apisix/conf/config.yaml
+
+if [ ! -r "$TEMPLATE" ]; then
+  echo "missing APISIX template: $TEMPLATE" >&2
+  exit 1
+fi
+
+if [ -z "${APISIX_ADMIN_KEY:-}" ]; then
+  echo "APISIX_ADMIN_KEY is required" >&2
+  exit 1
+fi
+
+escaped_key=$(printf '%s' "$APISIX_ADMIN_KEY" | sed 's/[\\&|]/\\&/g')
+sed "s|\${APISIX_ADMIN_KEY}|$escaped_key|g" "$TEMPLATE" > "$TARGET"
+exec /usr/bin/apisix start

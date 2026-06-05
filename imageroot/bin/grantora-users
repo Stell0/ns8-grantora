@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Optional
 from urllib.parse import urlencode
 
 
@@ -135,7 +136,7 @@ def ldap_users(domain_name: str) -> list[dict[str, str]]:
     return normalized
 
 
-def admin_api(method: str, path: str, data: dict[str, object] | None = None) -> dict[str, object]:
+def admin_api(method: str, path: str, data: Optional[dict[str, object]] = None) -> dict[str, object]:
     args = [ADMIN_HELPER, method, path]
     if data is not None:
         args.append(json.dumps(data))

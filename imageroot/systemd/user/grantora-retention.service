@@ -5,4 +5,4 @@ Requires=grantora-api.service
 
 [Service]
 Type=oneshot
-ExecStart=grantora-operations retention
+ExecStart=%h/.config/bin/grantora-operations retention

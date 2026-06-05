@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Optional
 from urllib.parse import urlencode, urlparse
 
 
@@ -80,7 +81,7 @@ def state_map(state: dict[str, object], key: str) -> dict[str, object]:
     return value
 
 
-def admin_api(method: str, path: str, data: dict[str, object] | None = None) -> dict[str, object]:
+def admin_api(method: str, path: str, data: Optional[dict[str, object]] = None) -> dict[str, object]:
     args = [str(ADMIN_HELPER), method, path]
     stdin = None
     if data is not None:
@@ -139,7 +140,7 @@ def safe_base_url(value: object) -> str:
     return base_url
 
 
-def query_string(values: dict[str, object | None]) -> str:
+def query_string(values: dict[str, Optional[object]]) -> str:
     pairs = []
     for key, value in values.items():
         if value is None:
@@ -154,7 +155,7 @@ def query_string(values: dict[str, object | None]) -> str:
 def list_collection(
     path: str,
     collection_key: str,
-    params: dict[str, object | None] | None = None,
+    params: Optional[dict[str, Optional[object]]] = None,
 ) -> list[dict[str, object]]:
     params = dict(params or {})
     limit = 500
@@ -175,7 +176,7 @@ def list_collection(
 def get_collection_page(
     path: str,
     collection_key: str,
-    params: dict[str, object | None] | None = None,
+    params: Optional[dict[str, Optional[object]]] = None,
 ) -> dict[str, object]:
     response = admin_api("GET", f"{path}?{query_string(dict(params or {}))}")
     page = response.get(collection_key, [])
@@ -184,7 +185,7 @@ def get_collection_page(
     return response
 
 
-def find_by(items: list[dict[str, object]], field: str, value: object) -> dict[str, object] | None:
+def find_by(items: list[dict[str, object]], field: str, value: object) -> Optional[dict[str, object]]:
     return next((item for item in items if item.get(field) == value), None)
 
 
@@ -198,7 +199,7 @@ def require_active(resource: dict[str, object], label: str, name: str) -> None:
 
 def require_fields(
     resource: dict[str, object],
-    expected: dict[str, object | None],
+    expected: dict[str, Optional[object]],
     label: str,
     name: str,
 ) -> None:
@@ -806,7 +807,7 @@ def status() -> dict[str, object]:
     }
 
 
-def secret_source(payload: dict[str, object]) -> tuple[str | None, str | None]:
+def secret_source(payload: dict[str, object]) -> tuple[Optional[str], Optional[str]]:
     value = payload.get("secret_value", payload.get("value"))
     external_reference = payload.get("external_reference")
     if (value is None) == (external_reference is None):
@@ -825,7 +826,7 @@ def require_secret_active(secret: dict[str, object]) -> None:
 def maybe_store_agent_token(
     payload: dict[str, object],
     agent: object,
-    token: str | None,
+    token: Optional[str],
 ) -> str:
     if token is None or not bool(payload.get("store_token", False)):
         return ""

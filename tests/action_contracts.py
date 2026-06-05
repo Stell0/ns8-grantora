@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import ast
 import hashlib
 import hmac
 import json
@@ -56,6 +57,18 @@ def run_helper(helper: str, command: str, state_directory: Path, stdin: object |
     return result.stdout
 
 
+def test_helper_scripts_remain_python39_compatible() -> None:
+    helpers = sorted((ROOT / "imageroot" / "bin").iterdir())
+    assert helpers, "helper scripts must exist"
+    for helper in helpers:
+        if not helper.is_file():
+            continue
+        source = helper.read_text(encoding="utf-8")
+        if not source.startswith("#!/usr/bin/env python3"):
+            continue
+        ast.parse(source, filename=str(helper), feature_version=(3, 9))
+
+
 def test_action_schemas_are_valid_and_strict() -> None:
     schema_paths = sorted((ROOT / "imageroot/actions").rglob("validate-*.json"))
     assert schema_paths, "action schemas must exist"
@@ -79,6 +92,8 @@ def test_configure_schema_matches_env_renderer_inputs() -> None:
     properties = schema["properties"]
     for input_name in input_to_env:
         assert input_name in properties, f"{input_name} is rendered but missing from schema"
+    assert "user_domain" in properties
+    assert "ldap_user_domain" in properties
     assert set(properties["tcp_port"]["not"]["enum"]) == {2379, 5432, 8080, 9180}
 
 
@@ -115,7 +130,7 @@ def test_env_rendering_is_idempotent_and_preserves_secrets() -> None:
         assert first_secrets["GRANTORA_ADMIN_BOOTSTRAP_TOKEN_HASH"] == f"hmac-sha256:{digest}"
         assert stat.S_IMODE((state_dir / "secrets.env").stat().st_mode) == 0o600
         assert stat.S_IMODE((state_dir / "postgres.env").stat().st_mode) == 0o600
-        assert stat.S_IMODE((state_dir / "apisix-config.yaml").stat().st_mode) == 0o600
+        assert stat.S_IMODE((state_dir / "apisix-config.yaml").stat().st_mode) == 0o644
 
         environment = parse_envfile(state_dir / "environment")
         grantora_env = parse_envfile(state_dir / "grantora.env")
@@ -130,6 +145,27 @@ def test_env_rendering_is_idempotent_and_preserves_secrets() -> None:
         assert first_secrets["DATABASE_URL"].startswith("postgresql+psycopg://grantora:")
         assert runtime_env["APISIX_ADMIN_URL"] == "http://127.0.0.1:9180"
         assert runtime_env["APISIX_RUNTIME_UPSTREAM_NODE"] == "127.0.0.1:8080"
+        assert "${APISIX_ADMIN_KEY}" in (state_dir / "apisix-config.yaml").read_text(encoding="utf-8")
+
+        (state_dir / "apisix-config.yaml").chmod(0o600)
+        run_helper("imageroot/bin/grantora-env", "render", state_root)
+        assert stat.S_IMODE((state_dir / "apisix-config.yaml").stat().st_mode) == 0o644
+
+
+def test_configure_schema_accepts_get_configuration_round_trip_fields() -> None:
+    schema = load_json("imageroot/actions/configure-module/validate-input.json")
+    properties = schema["properties"]
+    assert isinstance(properties, dict)
+    for field in (
+        "configured",
+        "files",
+        "ldap_user_domain",
+        "public_base_url",
+        "available_user_domains",
+        "user_domain_discovery_error",
+        "user_sync",
+    ):
+        assert field in properties, f"missing round-trip field: {field}"
 
 
 def test_env_rendering_generates_hidden_tcp_port_when_not_provided() -> None:
