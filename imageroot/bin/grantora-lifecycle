@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Optional, Union
 
 
 BIN_DIR = Path(__file__).resolve().parent
@@ -99,7 +100,7 @@ def redact(value: str) -> str:
 
 
 def run(
-    args: list[str | Path],
+    args: list[Union[str, Path]],
     *,
     timeout: int = 120,
     check: bool = True,
@@ -129,7 +130,7 @@ def run(
     return result
 
 
-def json_from_command(args: list[str | Path], *, timeout: int = 120) -> dict[str, object]:
+def json_from_command(args: list[Union[str, Path]], *, timeout: int = 120) -> dict[str, object]:
     result = run(args, timeout=timeout)
     try:
         output = json.loads(result.stdout or "{}")
@@ -327,7 +328,7 @@ def upgrade(payload: dict[str, object]) -> dict[str, object]:
     }
     record_upgrade(record)
 
-    previous_env: dict[str, str] | None = None
+    previous_env: Optional[dict[str, str]] = None
     migrations = {"ran": False, "status": "not_started"}
     try:
         if payload.get("pull", True):

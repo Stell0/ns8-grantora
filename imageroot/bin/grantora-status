@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 
 HELPER = Path(__file__).resolve().parent / "grantora-env"
@@ -37,7 +38,7 @@ REDACT_PATTERNS = (
 )
 
 
-def command(args: list[str], stdin: str | None = None) -> subprocess.CompletedProcess[str]:
+def command(args: list[str], stdin: Optional[str] = None) -> subprocess.CompletedProcess[str]:
     try:
         return subprocess.run(
             args,

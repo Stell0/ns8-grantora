@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 
 STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", Path.home() / ".local/state")) / "state"
@@ -30,7 +31,7 @@ def parse_envfile(path: Path) -> dict[str, str]:
     return values
 
 
-def payload_from_args(args: argparse.Namespace) -> object | None:
+def payload_from_args(args: argparse.Namespace) -> Optional[object]:
     if args.data is not None and args.data_json is not None:
         raise SystemExit("provide either positional data or --data-json, not both")
     raw_payload = args.data_json if args.data_json is not None else args.data

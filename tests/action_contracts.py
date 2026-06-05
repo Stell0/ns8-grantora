@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import ast
 import hashlib
 import hmac
 import json
@@ -54,6 +55,18 @@ def run_helper(helper: str, command: str, state_directory: Path, stdin: object |
     )
     assert result.returncode == 0, result.stderr or result.stdout
     return result.stdout
+
+
+def test_helper_scripts_remain_python39_compatible() -> None:
+    helpers = sorted((ROOT / "imageroot" / "bin").iterdir())
+    assert helpers, "helper scripts must exist"
+    for helper in helpers:
+        if not helper.is_file():
+            continue
+        source = helper.read_text(encoding="utf-8")
+        if not source.startswith("#!/usr/bin/env python3"):
+            continue
+        ast.parse(source, filename=str(helper), feature_version=(3, 9))
 
 
 def test_action_schemas_are_valid_and_strict() -> None:
