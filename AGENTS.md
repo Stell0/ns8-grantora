@@ -18,10 +18,11 @@ This repository is an NS8 module. Follow official NS8 docs first, then local rep
 3. Current maintained modules: `ns8-core`, `ns8-mail`, `ns8-prometheus`, `ns8-traefik`.
 
 ## Resource map
-- NethServer 8 administrator manual: https://docs.nethserver.org/projects/ns8
-- NethServer 8 developer manual: https://nethserver.github.io/ns8-core/
-- NethServer 8 issue tracker: https://github.com/NethServer/dev
-- NethServer 8 core source code: https://github.com/NethServer/ns8-core
+
+- [NethServer 8 administrator manual](https://docs.nethserver.org/projects/ns8)
+- [NethServer 8 developer manual](https://nethserver.github.io/ns8-core/)
+- [NethServer 8 issue tracker](https://github.com/NethServer/dev)
+- [NethServer 8 core source code](https://github.com/NethServer/ns8-core)
 
 ## Non-negotiable NS8 model
 
@@ -145,6 +146,7 @@ This repository is an NS8 module. Follow official NS8 docs first, then local rep
 - Never invent NS8 standards. Mark unsupported or unclear rules as gaps.
 
 ## Testing and validation
+
 - Use `build-images.sh` to build and test locally.
 - Use ssh to makako.sf.nethserver.net for testing in a real NS8 environment.
 - After each milestone, run the test on the staging cluster
