@@ -5,7 +5,6 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RESERVED_PORTS = {2379, 5432, 8080, 9180}
 REDACTION_SAMPLES = (
     'Authorization: Bearer grantora-admin-secret',
     'ADMIN_BOOTSTRAP_TOKEN=grantora-admin-secret',
@@ -59,11 +58,13 @@ def test_pod_port_boundary() -> None:
         assert "--publish" not in unit.read_text(encoding="utf-8"), unit.name
 
 
-def test_reserved_runtime_ports() -> None:
+def test_hidden_runtime_port_comes_from_ns8() -> None:
     schema = json.loads(read("imageroot/actions/configure-module/validate-input.json"))
-    reserved = set(schema["properties"]["tcp_port"]["not"]["enum"])
-    assert reserved == RESERVED_PORTS
-    assert "RESERVED_TCP_PORTS = {8080, 9180, 5432, 2379}" in read("imageroot/bin/grantora-env")
+    assert "tcp_port" not in schema["properties"]
+    env_helper = read("imageroot/bin/grantora-env")
+    assert "allocate_tcp_port" not in env_helper
+    assert 'env["TCP_PORT"] = assigned_tcp_port(env)' in env_helper
+    assert 'env.get("TCP_PORTS") or os.environ.get("TCP_PORTS", "")' in env_helper
 
 
 def test_secret_modes_and_oidc_disabled() -> None:

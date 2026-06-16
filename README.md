@@ -130,13 +130,12 @@ api-cli run module/grantora1/configure-module --data '{
 
 ### Configuration fields
 
-Use `get-defaults` or the `Settings` page as the source of current defaults. The main fields are:
+Use `get-defaults` or the `Settings` page as the source of current defaults. NS8 assigns the hidden loopback listener through `TCP_PORT`/`TCP_PORTS`; Grantora must consume that assigned value instead of exposing a separate port setting. The main fields are:
 
 | Field | Meaning | Notes |
 | --- | --- | --- |
 | `host` | Public FQDN for agents | Required. Must be a fully qualified hostname. |
 | `lets_encrypt` | NS8 certificate request | Controls Traefik certificate automation. |
-| `tcp_port` | Loopback APISIX runtime port | Must not be `2379`, `5432`, `8080`, or `9180`. |
 | `grantora_image` | Upstream Grantora API image | Use a stable registry and immutable tags for production. |
 | `grantora_version` | Upstream Grantora version tag | Used by upgrade and status reporting. |
 | `log_level` | Grantora application log level | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. |

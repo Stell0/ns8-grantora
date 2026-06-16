@@ -94,12 +94,15 @@ def test_configure_schema_matches_env_renderer_inputs() -> None:
         assert input_name in properties, f"{input_name} is rendered but missing from schema"
     assert "user_domain" in properties
     assert "ldap_user_domain" in properties
-    assert set(properties["tcp_port"]["not"]["enum"]) == {2379, 5432, 8080, 9180}
+    assert "tcp_port" not in properties
 
 
 def test_env_rendering_is_idempotent_and_preserves_secrets() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         state_root = Path(tmp)
+        state_dir = state_root / "state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        (state_dir / "environment").write_text("TCP_PORTS=20001\n", encoding="utf-8")
         config = {
             "host": "grantora.example.test",
             "lets_encrypt": False,
@@ -113,10 +116,8 @@ def test_env_rendering_is_idempotent_and_preserves_secrets() -> None:
             "upstream_timeout_seconds": 20,
             "upstream_connect_timeout_seconds": 4,
             "upstream_tls_verify": True,
-            "tcp_port": 19080,
         }
         run_helper("imageroot/bin/grantora-env", "configure", state_root, config)
-        state_dir = state_root / "state"
         first_secrets = parse_envfile(state_dir / "secrets.env")
         run_helper("imageroot/bin/grantora-env", "render", state_root)
         second_secrets = parse_envfile(state_dir / "secrets.env")
@@ -168,9 +169,12 @@ def test_configure_schema_accepts_get_configuration_round_trip_fields() -> None:
         assert field in properties, f"missing round-trip field: {field}"
 
 
-def test_env_rendering_generates_hidden_tcp_port_when_not_provided() -> None:
+def test_env_rendering_uses_ns8_assigned_tcp_port() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         state_root = Path(tmp)
+        state_dir = state_root / "state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        (state_dir / "environment").write_text("TCP_PORT=20000\nTCP_PORTS=20001\n", encoding="utf-8")
         config = {
             "host": "grantora.example.test",
             "lets_encrypt": True,
@@ -179,16 +183,16 @@ def test_env_rendering_generates_hidden_tcp_port_when_not_provided() -> None:
         }
 
         run_helper("imageroot/bin/grantora-env", "configure", state_root, config)
-        first_environment = parse_envfile(state_root / "state" / "environment")
-        first_port = int(first_environment["TCP_PORT"])
+        first_environment = parse_envfile(state_dir / "environment")
 
-        assert first_port not in {2379, 5432, 8080, 9180}
-        assert first_port != 9080
+        assert first_environment["TCP_PORT"] == "20001"
+        assert first_environment["TCP_PORTS"] == "20001"
 
         run_helper("imageroot/bin/grantora-env", "configure", state_root, config)
-        second_environment = parse_envfile(state_root / "state" / "environment")
+        second_environment = parse_envfile(state_dir / "environment")
 
-        assert int(second_environment["TCP_PORT"]) == first_port
+        assert second_environment["TCP_PORT"] == "20001"
+        assert second_environment["TCP_PORTS"] == "20001"
 
 
 def test_domain_discovery_sanitizes_provider_metadata() -> None:
