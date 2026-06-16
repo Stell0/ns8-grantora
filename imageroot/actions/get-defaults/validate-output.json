@@ -19,25 +19,53 @@
         "upstream_connect_timeout_seconds",
         "upstream_max_response_bytes",
         "upstream_read_retry_attempts",
-        "tcp_port",
         "lets_encrypt"
     ],
     "properties": {
-        "host": {"type": "string"},
-        "grantora_image": {"type": "string"},
-        "grantora_version": {"type": "string"},
-        "metrics_enabled": {"type": "boolean"},
-        "log_level": {"type": "string"},
-        "runtime_rate_limit_count": {"type": "integer"},
-        "runtime_rate_limit_time_window": {"type": "integer"},
-        "audit_retention_days": {"type": "integer"},
-        "usage_retention_days": {"type": "integer"},
-        "upstream_tls_verify": {"type": "boolean"},
-        "upstream_timeout_seconds": {"type": "integer"},
-        "upstream_connect_timeout_seconds": {"type": "integer"},
-        "upstream_max_response_bytes": {"type": "integer"},
-        "upstream_read_retry_attempts": {"type": "integer"},
-        "tcp_port": {"type": "integer"},
-        "lets_encrypt": {"type": "boolean"}
+        "host": {
+            "type": "string"
+        },
+        "grantora_image": {
+            "type": "string"
+        },
+        "grantora_version": {
+            "type": "string"
+        },
+        "metrics_enabled": {
+            "type": "boolean"
+        },
+        "log_level": {
+            "type": "string"
+        },
+        "runtime_rate_limit_count": {
+            "type": "integer"
+        },
+        "runtime_rate_limit_time_window": {
+            "type": "integer"
+        },
+        "audit_retention_days": {
+            "type": "integer"
+        },
+        "usage_retention_days": {
+            "type": "integer"
+        },
+        "upstream_tls_verify": {
+            "type": "boolean"
+        },
+        "upstream_timeout_seconds": {
+            "type": "integer"
+        },
+        "upstream_connect_timeout_seconds": {
+            "type": "integer"
+        },
+        "upstream_max_response_bytes": {
+            "type": "integer"
+        },
+        "upstream_read_retry_attempts": {
+            "type": "integer"
+        },
+        "lets_encrypt": {
+            "type": "boolean"
+        }
     }
 }

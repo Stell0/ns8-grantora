@@ -7,7 +7,6 @@ import json
 import os
 import re
 import secrets
-import socket
 import stat
 import sys
 from pathlib import Path
@@ -58,14 +57,11 @@ DEFAULT_ENV = {
     "UPSTREAM_TLS_VERIFY": "true",
     "UPSTREAM_MAX_RESPONSE_BYTES": "10485760",
     "UPSTREAM_READ_RETRY_ATTEMPTS": "2",
-    "TCP_PORT": "9080",
     "SYNC_USERS_ENABLED": "false",
     "SYNC_USERS_INTERVAL_MINUTES": "60",
     "SYNC_DISABLE_MISSING": "true",
     "SYNC_REACTIVATE_USERS": "true",
 }
-
-RESERVED_TCP_PORTS = {8080, 9180, 5432, 2379}
 
 INPUT_TO_ENV = {
     "grantora_image": "GRANTORA_IMAGE",
@@ -81,7 +77,6 @@ INPUT_TO_ENV = {
     "upstream_connect_timeout_seconds": "UPSTREAM_CONNECT_TIMEOUT_SECONDS",
     "upstream_max_response_bytes": "UPSTREAM_MAX_RESPONSE_BYTES",
     "upstream_read_retry_attempts": "UPSTREAM_READ_RETRY_ATTEMPTS",
-    "tcp_port": "TCP_PORT",
     "sync_users_enabled": "SYNC_USERS_ENABLED",
     "sync_users_interval_minutes": "SYNC_USERS_INTERVAL_MINUTES",
 }
@@ -167,33 +162,32 @@ def default_host() -> str:
     return "grantora.example.org"
 
 
+def assigned_tcp_port(env: dict[str, str]) -> str:
+    raw_ports = env.get("TCP_PORTS") or os.environ.get("TCP_PORTS", "")
+    for candidate in raw_ports.replace(",", " ").split():
+        return candidate
+
+    existing_port = env.get("TCP_PORT") or os.environ.get("TCP_PORT", "")
+    if existing_port:
+        return existing_port
+
+    print("NS8 did not provide TCP_PORT/TCP_PORTS for Grantora", file=sys.stderr)
+    sys.exit(2)
+
+
 def load_runtime_env() -> dict[str, str]:
     current = parse_envfile(first_existing_state_file("environment"))
     env = DEFAULT_ENV | current
+    env["TCP_PORT"] = assigned_tcp_port(env)
     env.setdefault("GRANTORA_PUBLIC_BASE_URL", f"http://127.0.0.1:{env['TCP_PORT']}")
     return env
-
-
-def allocate_tcp_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        port = sock.getsockname()[1]
-    if port in RESERVED_TCP_PORTS:
-        return allocate_tcp_port()
-    return port
 
 
 def configure() -> None:
     config = json.load(sys.stdin)
     if "user_domain" not in config and config.get("ldap_user_domain"):
         config["user_domain"] = config["ldap_user_domain"]
-    if "tcp_port" in config and int(config["tcp_port"]) in RESERVED_TCP_PORTS:
-        reserved = ", ".join(str(port) for port in sorted(RESERVED_TCP_PORTS))
-        print(f"tcp_port is reserved for private pod-local services: {reserved}", file=sys.stderr)
-        sys.exit(2)
     env = load_runtime_env()
-    if "tcp_port" not in config and env.get("TCP_PORT") == DEFAULT_ENV["TCP_PORT"]:
-        env["TCP_PORT"] = str(allocate_tcp_port())
     for input_name, env_name in INPUT_TO_ENV.items():
         if input_name in config and config[input_name] is not None:
             env[env_name] = as_env_value(config[input_name])
@@ -230,7 +224,6 @@ def default_config() -> dict[str, object]:
         "upstream_connect_timeout_seconds": int(env["UPSTREAM_CONNECT_TIMEOUT_SECONDS"]),
         "upstream_max_response_bytes": int(env["UPSTREAM_MAX_RESPONSE_BYTES"]),
         "upstream_read_retry_attempts": int(env["UPSTREAM_READ_RETRY_ATTEMPTS"]),
-        "tcp_port": int(env["TCP_PORT"]),
         "lets_encrypt": env.get("TRAEFIK_LETS_ENCRYPT", "true") == "true",
         "sync_users_enabled": env["SYNC_USERS_ENABLED"] == "true",
         "sync_users_interval_minutes": int(env["SYNC_USERS_INTERVAL_MINUTES"]),
@@ -396,7 +389,6 @@ def status() -> None:
             "upstream_read_retry_attempts": int(env["UPSTREAM_READ_RETRY_ATTEMPTS"]),
             "ldap_user_domain": env.get("LDAP_USER_DOMAIN", ""),
             "public_base_url": env["GRANTORA_PUBLIC_BASE_URL"],
-            "tcp_port": int(env["TCP_PORT"]),
             "sync_users_enabled": env["SYNC_USERS_ENABLED"] == "true",
             "sync_users_interval_minutes": int(env["SYNC_USERS_INTERVAL_MINUTES"]),
         },

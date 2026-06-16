@@ -77,7 +77,6 @@
     "sync_users_enabled": "Sync LDAP users into Grantora",
     "sync_users_interval_minutes": "Sync interval in minutes",
     "public_route": "Public route",
-    "tcp_port": "Loopback runtime port",
     "runtime_image": "Runtime image",
     "grantora_image": "Grantora image",
     "grantora_version": "Grantora version",

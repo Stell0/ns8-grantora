@@ -13,8 +13,7 @@
         "grantora_version",
         "ldap_user_domain",
         "available_user_domains",
-        "public_base_url",
-        "tcp_port"
+        "public_base_url"
     ],
     "properties": {
         "configured": {
@@ -75,14 +74,31 @@
             "type": "array",
             "items": {
                 "type": "object",
-                "required": ["name", "schema", "reachable", "selected"],
+                "required": [
+                    "name",
+                    "schema",
+                    "reachable",
+                    "selected"
+                ],
                 "properties": {
-                    "name": {"type": "string"},
-                    "schema": {"type": "string"},
-                    "location": {"type": "string"},
-                    "provider_module": {"type": "string"},
-                    "reachable": {"type": "boolean"},
-                    "selected": {"type": "boolean"}
+                    "name": {
+                        "type": "string"
+                    },
+                    "schema": {
+                        "type": "string"
+                    },
+                    "location": {
+                        "type": "string"
+                    },
+                    "provider_module": {
+                        "type": "string"
+                    },
+                    "reachable": {
+                        "type": "boolean"
+                    },
+                    "selected": {
+                        "type": "boolean"
+                    }
                 }
             }
         },
@@ -100,9 +116,6 @@
         },
         "public_base_url": {
             "type": "string"
-        },
-        "tcp_port": {
-            "type": "integer"
         }
     }
 }

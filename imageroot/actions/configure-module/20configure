@@ -23,9 +23,16 @@ subprocess.run([helper, "configure"], input=json.dumps(config), text=True, check
 
 result = subprocess.run([helper, "status"], text=True, check=True, capture_output=True)
 state = json.loads(result.stdout)
+state_env = {}
+for raw_line in (Path(os.environ.get("STATE_DIRECTORY", Path.home() / ".local/state")) / "state" / "environment").read_text(encoding="utf-8").splitlines():
+    if raw_line and not raw_line.startswith("#") and "=" in raw_line:
+        key, value = raw_line.split("=", 1)
+        state_env[key] = value
+raw_ports = state_env.get("TCP_PORTS") or state_env.get("TCP_PORT") or os.environ.get("TCP_PORTS") or os.environ.get("TCP_PORT") or ""
+tcp_port = raw_ports.replace(",", " ").split()[0]
 route_data = {
     "instance": os.environ.get("MODULE_ID", "grantora"),
-    "url": f"http://127.0.0.1:{state['tcp_port']}",
+    "url": f"http://127.0.0.1:{tcp_port}",
     "host": config["host"],
     "http2https": True,
     "lets_encrypt": bool(config.get("lets_encrypt", True)),
